@@ -122,96 +122,83 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cout << "Sent " << ret << " bytes out." << std::endl;
-
   server_addr_length = sizeof(struct sockaddr_in);
 
   ret = recvfrom(udp_socket, &recvfrom_buff, 2047, 0, (struct sockaddr *)&server_addr, &server_addr_length); // Receive up to 2048 bytes of data
 
-  // If less than 4 bytes were returned then the server struct failed to send or some other error occurred
+  // If less than 4 bytes were returned then the server struct failed to send
+  // the other error codes for recvfrom are less than 4 so it covers those as well
   if (ret < 4) {
     std::cerr << "Failed to recvfrom!" << std::endl;
     std::cerr << strerror(errno) << std::endl;
     close(udp_socket);
     return 1;
   }
-  std::cout << "Received " << ret << " bytes from server \n";
 
+  uint8_t response_type;
+  response_type = recvfrom_buff[0] >> 8; // Grab the upper bits (shoulda used ntohs but too late for that now)
 
-  uint16_t response_type = recvfrom_buff[0]; // ServerResponse.type based on the header file
-
-  enum ResponseType{Echo = 0, Empty = 1,  Error = 2};
-  switch(response_type){
-    case Empty :
-              std::cout << "Received EMPTY response from server." << std::endl;
-              break;
-    case Echo :
-              std::cout << "Received ECHO response from server." << std::endl;
-              break;
-    case Error :
-              std::cout << "Received ERROR response from server." << std::endl;
-              break;
-    default: std::cout << "Response type error." << std::endl;
-              return 1;
-  }
-  std::cout << "Secret was " << recvfrom_buff[1] << std::endl; // ServerResponse.secret based on header file
   char first_byte;
   char second_byte;
-  std::string temp_string;
-  std::string string_response;
+  int counter = 0;
+  int buff_counter = 2;
+  uint16_t secret;
 
-  int n;
-  if (response_type = 0){
-    for (int i = 2; i < ret; i++){
-      first_byte = (uint8_t)recvfrom_buff[i] >> 8; // Bit shift to get the 'higher' byte
-      second_byte = (uint8_t)recvfrom_buff[i] & 0xff; // Use a mask to get 'lower byte'
-    //  first_byte = hexval(first_byte);
-      //second_byte = hexval(second_byte);
-      //first_byte = (first_byte << 4) + first_byte;
-      //second_byte = (second_byte << 4) + second_byte;
-      string_response += std::to_string(first_byte);
-      string_response += std::to_string(second_byte);
-      //temp_string += std::to_string(first_byte);
-      //temp_string += std::to_string(second_byte);
-      //std::string byte = temp_string.substr(i,2);
-      //char chr = (char) (int)strtol(byte.c_str(), NULL, 16);
-      //string_response.push_back(chr);
-    //std::cout << (char)first_byte[0];
-    //std::cout << (char)second_byte[0];
-    //sprintf(string_response, "%c%c", first_byte[0], second_byte[0]); // += std::to_string((char)first_byte[0]);
-    //sprintf(string_response, "%c", second_byte[0]); //string_response += std::to_string((char)second_byte[0]);
-    //printf("%c%c", first_byte, second_byte);
+  secret = ntohs(recvfrom_buff[1]);
+
+  if (response_type == 0){
+    std::cout << "Received ECHO response from server. Secret was " << secret << std::endl;
+    std::cout << "Echoed string was: ";
+    while(counter < ret - 4){
+      // note to future james: use ntohs on recvfrom buffer so I don't have to do these
+      // litte to big endian shenanigans
+     first_byte = recvfrom_buff[buff_counter] & 0xff; // Grab lower byte
+      counter++;
+      second_byte = recvfrom_buff[buff_counter] >> 8; // Grab upper byte
+      counter++;
+      buff_counter++;
+    printf("%c%c", first_byte, second_byte);
   }
-   //printf("%s\n", string_response); //std::cout << string_response << std::endl;
-  //temp_string = HEX2STR(string_response);
-   std::cout << string_response << std::endl;
+  printf("\n");
+
 }
 
+  else if (response_type == 1){
+  std::cout << "Received EMPTY response from server. Secret was " << secret << std::endl;
+}
 
-if (response_type = 1){
-  for (int i = 2; i < ret; i++){
-    first_byte = (uint8_t)recvfrom_buff[i] >> 8; // Bit shift to get the 'higher' byte
-    second_byte = (uint8_t)recvfrom_buff[i] & 0xff; // Use a mask to get 'lower byte'
-
-    //first_byte = (first_byte << 4) + first_byte;
-  //  second_byte = (second_byte << 4) + second_byte;
-    string_response += std::to_string(first_byte);
-    string_response += std::to_string(second_byte);
-    //temp_string += std::to_string(first_byte);
-    //temp_string += std::to_string(second_byte);
-    //std::string byte = temp_string.substr(i,2);
-    //char chr = (char) (int)strtol(byte.c_str(), NULL, 16);
-    //string_response.push_back(chr);
-    //std::cout << (char)first_byte[0];
-    //std::cout << (char)second_byte[0];
-    //sprintf(string_response, "%c%c", first_byte[0], second_byte[0]); // += std::to_string((char)first_byte[0]);
-    //sprintf(string_response, "%c", second_byte[0]); //string_response += std::to_string((char)second_byte[0]);
-    //printf("%c%c", first_byte, second_byte);
+  else if (response_type == 2){
+  std::cout << "Received ERROR response from server. Secret was " << secret << std::endl;
+  std::cout << "Error string was: ";
+  while(counter < ret - 4){
+    // note to future james: use ntohs on recvfrom buffer so I don't have to do these
+    // litte to big endian shenanigans
+   first_byte = recvfrom_buff[buff_counter] & 0xff; // Grab lower byte
+   counter++;
+    second_byte = recvfrom_buff[buff_counter] >> 8; // Grab upper byte
+    counter++;
+    buff_counter++;
+    printf("%c%c", first_byte, second_byte);
     }
-    //printf("%s\n", string_response); //std::cout << string_response << std::endl;
-    //std::cout << string_response << std::endl;
-  //  temp_string = HEX2STR(string_response);
-     std::cout << string_response << std::endl;
+    printf("\n");
+  }
+
+  else {
+    std::cout << "Received UNKOWN response from server. Secret was " << secret << std::endl;
+      if (ret > 4){
+        std::cout << "UNKOWN DATA: ";
+        while(counter < ret - 4){
+          // note to future james: use ntohs on recvfrom buffer so I don't have to do these
+          // litte to big endian shenanigans
+         first_byte = recvfrom_buff[buff_counter] & 0xff; // Grab lower byte
+         counter++;
+          second_byte = recvfrom_buff[buff_counter] >> 8; // Grab upper byte
+          counter++;
+          buff_counter++;
+          printf("%c%c", first_byte, second_byte);
+          }
+          printf("\n");
+      }
   }
 
 
