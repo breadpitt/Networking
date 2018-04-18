@@ -52,8 +52,10 @@ int main(int argc, char *argv[]) {
   // IPv4 structure representing and IP address and port of the destination
   struct sockaddr_in dest_addr;
   socklen_t dest_addr_len;
-  struct sockaddr_in recv_addr;
-  socklen_t recv_addr_len;
+  struct sockaddr_in client_address;
+  socklen_t client_address_length;
+  //struct sockaddr_in recv_addr;
+ // socklen_t recv_addr_len;
   char recv_buf[2048];
 
   // Set dest_addr to all zeroes, just to make sure it's not filled with junk
@@ -122,6 +124,14 @@ int main(int argc, char *argv[]) {
   // Send the data to the destination.
   // Note: Sending to and receiving from the same server so use the same addr (in this case dest_addr even though data it is a source address)
   // Note 3: the return value of sendto is the number of bytes sent
+ret = bind(udp_socket, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+
+if (ret == -1) {
+  std::cerr << "Failed to bind!" << std::endl;
+  std::cerr << strerror(errno) << std::endl;
+  close(udp_socket);
+  return 1;
+  }
 
   // First we will send a connect monitor message.
   struct ChatMonMsg connect_server; // connect TO server
@@ -141,8 +151,10 @@ ret = sendto(udp_socket, &connect_server, sizeof(connect_server), 0,
 
 
   struct ChatMonMsg client_msg;
+client_address_length = sizeof(struct sockaddr_in);
 
-ret = recvfrom(udp_socket, &recv_buf, 2047, 0, (struct sockaddr *)&dest_addr, &dest_addr_len); // Receive up to 2047 bytes of data
+ret = recvfrom(udp_socket, recv_buf, 2047, 0,(struct sockaddr *)&client_address, &client_address_length);
+
       std::cout << "MESSAGE: NUMBER OF BYTES RECEIVED " << ret << std::endl;
 
     if (ret < sizeof(client_msg)) {
