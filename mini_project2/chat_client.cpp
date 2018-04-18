@@ -130,12 +130,12 @@ int main(int argc, char *argv[]) {
   // Send nickname message
   struct ChatClientMessage send_nickname;
   send_nickname.type = htons(CLIENT_SET_NICKNAME);
-  send_nickname.data_length = htons(sizeof(nickname));
+  send_nickname.data_length = htons(strlen(nickname.c_str()));
 
-  uint16_t set_nickname_buf[sizeof(ChatClientMessage) + strlen(nickname.c_str())]; // strlen to get length without null terminator
+  char set_nickname_buf[sizeof(ChatClientMessage) + strlen(nickname.c_str())]; // strlen to get length without null terminator
   memcpy(set_nickname_buf, &send_nickname, sizeof(send_nickname));
   memcpy(set_nickname_buf + sizeof(send_nickname), nickname.c_str(), strlen(nickname.c_str()));
-  ret = sendto(udp_socket, &send_nickname, sizeof(send_nickname), 0,
+  ret = sendto(udp_socket, &set_nickname_buf, sizeof(set_nickname_buf), 0,
                (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
     
     std::cout << "NICKNAME: NUMBER OF BYTES SENT" << ret << std::endl;

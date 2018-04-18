@@ -139,14 +139,10 @@ ret = sendto(udp_socket, &connect_server, sizeof(connect_server), 0,
     close(udp_socket);
   }
 
-  
-  
+
   struct ChatMonMsg client_msg;
-  
-  // After sending the connect monitor message, the monitor will just
-  // sit and wait for messages to output. Easy peasy.
-  while (stop == false) {
-    ret = recvfrom(udp_socket, &recv_buf, 2048, 0, (struct sockaddr *)&dest_addr, &dest_addr_len); // Receive up to 2048 bytes of data
+
+ret = recvfrom(udp_socket, &recv_buf, 2047, 0, (struct sockaddr *)&dest_addr, &dest_addr_len); // Receive up to 2047 bytes of data
       std::cout << "MESSAGE: NUMBER OF BYTES RECEIVED " << ret << std::endl;
 
     if (ret < sizeof(client_msg)) {
@@ -170,7 +166,13 @@ ret = sendto(udp_socket, &connect_server, sizeof(connect_server), 0,
     memcpy(data_buf, &recv_buf[sizeof(client_msg) + client_msg.nickname_len], client_msg.data_len);
     data_buf[client_msg.nickname_len + 1] = '\0';
 
-    std::cout << nickname_buf << " said: " << data_buf << std::endl;
+    std::cout << nickname_buf << " said: " << data_buf << std::endl;  
+  
+  
+  // After sending the connect monitor message, the monitor will just
+  // sit and wait for messages to output. Easy peasy.
+  while (stop == false) {
+    
 
 
   }
