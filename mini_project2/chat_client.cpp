@@ -167,6 +167,8 @@ int main(int argc, char *argv[]) {
       std::cerr << "Message failed to send!" << std::endl;
       std::cerr << strerror(errno) << std::endl;
       }
+    
+    std::cout << "Sending message " << next_message << "\n";
     next_message = get_message();
   }
 

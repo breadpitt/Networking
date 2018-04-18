@@ -124,14 +124,14 @@ int main(int argc, char *argv[]) {
   // Send the data to the destination.
   // Note: Sending to and receiving from the same server so use the same addr (in this case dest_addr even though data it is a source address)
   // Note 3: the return value of sendto is the number of bytes sent
-ret = bind(udp_socket, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+//ret = bind(udp_socket, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
 
-if (ret == -1) {
-  std::cerr << "Failed to bind!" << std::endl;
-  std::cerr << strerror(errno) << std::endl;
-  close(udp_socket);
-  return 1;
-  }
+//if (ret == -1) {
+ // std::cerr << "Failed to bind!" << std::endl;
+ // std::cerr << strerror(errno) << std::endl;
+ // close(udp_socket);
+ // return 1;
+  //}
 
   // First we will send a connect monitor message.
   struct ChatMonMsg connect_server; // connect TO server
@@ -152,8 +152,12 @@ ret = sendto(udp_socket, &connect_server, sizeof(connect_server), 0,
 
   struct ChatMonMsg client_msg;
 client_address_length = sizeof(struct sockaddr_in);
-
-ret = recvfrom(udp_socket, recv_buf, 2047, 0,(struct sockaddr *)&client_address, &client_address_length);
+  //char switcheroo[2048];
+  
+  // After sending the connect monitor message, the monitor will just
+  // sit and wait for messages to output. Easy peasy.
+  while (stop == false) {
+    ret = recvfrom(udp_socket, recv_buf, 2047, 0,(struct sockaddr *)&client_address, &client_address_length);
 
       std::cout << "MESSAGE: NUMBER OF BYTES RECEIVED " << ret << std::endl;
 
@@ -163,7 +167,8 @@ ret = recvfrom(udp_socket, recv_buf, 2047, 0,(struct sockaddr *)&client_address,
       close(udp_socket);
       return 1;
     }
-
+    
+    /// Not getting quite the right pointers when copying to the nickname or data buffers
     memcpy(&client_msg, recv_buf, sizeof(client_msg));
 
     client_msg.type = ntohs(client_msg.type);
@@ -179,12 +184,6 @@ ret = recvfrom(udp_socket, recv_buf, 2047, 0,(struct sockaddr *)&client_address,
     data_buf[client_msg.nickname_len + 1] = '\0';
 
     std::cout << nickname_buf << " said: " << data_buf << std::endl;  
-  
-  
-  // After sending the connect monitor message, the monitor will just
-  // sit and wait for messages to output. Easy peasy.
-  while (stop == false) {
-    
 
 
   }
