@@ -131,6 +131,8 @@ int main(int argc, char *argv[]) {
 
 ret = sendto(udp_socket, &connect_server, sizeof(connect_server), 0,
                (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+                 std::cout << "CONNECT: NUMBER OF BYTES SENT" << ret << std::endl;
+
   if (ret == -1){
     std::cerr << "Failed to connect to server!" << std::endl;
     std::cerr << strerror(errno) << std::endl;
@@ -144,9 +146,10 @@ ret = sendto(udp_socket, &connect_server, sizeof(connect_server), 0,
   // After sending the connect monitor message, the monitor will just
   // sit and wait for messages to output. Easy peasy.
   while (stop == false) {
-    ret = recvfrom(udp_socket, &recv_buf, 2047, 0, (struct sockaddr *)&dest_addr, &dest_addr_len); // Receive up to 2048 bytes of data
-    
-    if (ret < 6) {
+    ret = recvfrom(udp_socket, &recv_buf, 2048, 0, (struct sockaddr *)&dest_addr, &dest_addr_len); // Receive up to 2048 bytes of data
+      std::cout << "MESSAGE: NUMBER OF BYTES RECEIVED " << ret << std::endl;
+
+    if (ret < sizeof(client_msg)) {
       std::cerr << "Failed to recvfrom!" << std::endl;
       std::cerr << strerror(errno) << std::endl;
       close(udp_socket);
@@ -164,7 +167,7 @@ ret = sendto(udp_socket, &connect_server, sizeof(connect_server), 0,
     nickname_buf[client_msg.nickname_len + 1] = '\0';
 
     char data_buf[client_msg.data_len + 1];
-    memcpy(data_buf, &recv_buf[6 + client_msg.nickname_len], client_msg.data_len);
+    memcpy(data_buf, &recv_buf[sizeof(client_msg) + client_msg.nickname_len], client_msg.data_len);
     data_buf[client_msg.nickname_len + 1] = '\0';
 
     std::cout << nickname_buf << " said: " << data_buf << std::endl;
@@ -178,6 +181,8 @@ ret = sendto(udp_socket, &connect_server, sizeof(connect_server), 0,
   disconnect_msg.data_len = 0;
   ret = sendto(udp_socket, &disconnect_msg, sizeof(disconnect_msg), 0,
                (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+    std::cout << "DISCONNECT: NUMBER OF BYTES SENT " << ret << std::endl;
+
   std::cout << "Shut down message sent to server, exiting!\n";
 
   close(udp_socket);
