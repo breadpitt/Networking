@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
   // IPv4 structure representing and IP address and port of the destination
   struct sockaddr_in dest_addr;
   std::string nickname;
-  char send_buffer[2048];
+  char send_buffer[2047];
 
   // Set dest_addr to all zeroes, just to make sure it's not filled with junk
   // Note we could also make it a static variable, which will be zeroed before execution
@@ -132,14 +132,10 @@ int main(int argc, char *argv[]) {
   send_nickname.type = htons(CLIENT_SET_NICKNAME);
   send_nickname.data_length = htons(sizeof(nickname));
 
-  uint16_t set_nickname_buf[sizeof(nickname) + sizeof(ChatClientMessage)];
+  uint16_t set_nickname_buf[sizeof(ChatClientMessage) + strlen(nickname.c_str())]; // strlen to get length without null terminator
   memcpy(set_nickname_buf, &send_nickname, sizeof(send_nickname));
+  memcpy(set_nickname_buf + sizeof(send_nickname), nickname.c_str(), strlen(nickname.c_str()));
   ret = sendto(udp_socket, &send_nickname, sizeof(send_nickname), 0,
-               (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
-  
-    std::cout << "NICKNAME STRUCT: NUMBER OF BYTES SENT" << ret << std::endl;
-
-  ret = sendto(udp_socket, &nickname, sizeof(nickname), 0,
                (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
     
     std::cout << "NICKNAME: NUMBER OF BYTES SENT" << ret << std::endl;
@@ -151,19 +147,19 @@ int main(int argc, char *argv[]) {
   }
   
     struct ChatClientMessage send_client_message;
-    
+    send_client_message.type = htons(CLIENT_SEND_MESSAGE);
+
   // Note 3: the return value of sendto is the number of bytes sent
  
   std::string next_message;
   next_message = get_message();
 
   while (next_message != "quit") {
-    send_client_message.type = htons(CLIENT_SEND_MESSAGE);
     send_client_message.data_length = htons(next_message.length());
 
     memcpy(send_buffer, &send_client_message, sizeof(send_client_message));
-    memcpy(&send_buffer[sizeof(send_client_message)], next_message.c_str(), strlen(next_message.c_str())); // Use strlen here to not include null terminator
-    ret = sendto(udp_socket, &send_buffer, sizeof(send_buffer), 0,
+    memcpy(send_buffer + sizeof(send_client_message), next_message.c_str(), strlen(next_message.c_str())); // Use strlen here to not include null terminator
+    ret = sendto(udp_socket, &send_buffer, sizeof(send_client_message) + strlen(next_message.c_str()), 0,
                (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
     std::cout << "MESSAGE: NUMBER OF BYTES " << ret << std::endl;
 
