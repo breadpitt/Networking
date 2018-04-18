@@ -113,9 +113,38 @@ int main(int argc, char *argv[]) {
   nickname = get_nickname();
 
   // Send connect message
+  struct ChatClientMessage client_connect;
+  client_connect.type = htons(CLIENT_CONNECT);
+  client_connect.data_length = 0;
+
+  ret = sendto(udp_socket, &client_connect, sizeof(client_connect), 0,
+               (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+  if (ret == -1){
+    std::cerr << "Failed to send connect request!" << std::endl;
+    std::cerr << strerror(errno) << std::endl;
+    close(udp_socket);
+  }
 
   // Send nickname message
+  struct ChatClientMessage send_nickname;
+  send_nickname.type = htons(CLIENT_SET_NICKNAME);
+  send_nickname.data_length = htons(sizeof(nickname));
 
+  uint16_t set_nickname_buf[sizeof(nickname) + sizeof(ChatClientMessage)];
+  memcpy(set_nickname_buf, &send_nickname, sizeof(send_nickname));
+  ret = sendto(udp_socket, &send_nickname, sizeof(send_nickname), 0,
+               (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+  ret = sendto(udp_socket, &nickname, sizeof(nickname), 0,
+               (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+  if (ret == -1){
+    std::cerr << "Failed to set nickname!" << std::endl;
+    std::cerr << strerror(errno) << std::endl;
+    close(udp_socket);
+  }
+  
+    struct ChatClientMessage send_client_message;
+    
+  //strcpy(&set_nickname_buf[6], nickname.c_str());
   // Send the data to the destination.
   // Note 1: we are sending strlen(data_string) + 1 to include the null terminator
   // Note 2: we are casting dest_addr to a struct sockaddr because sendto uses the size
@@ -125,9 +154,18 @@ int main(int argc, char *argv[]) {
   //             (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
   std::string next_message;
   next_message = get_message();
-
   while (next_message != "quit") {
+    send_client_message.type = htons(CLIENT_SEND_MESSAGE);
+    send_client_message.data_length = htons(next_message.length());
 
+    memcpy(send_buffer, &send_client_message, sizeof(send_client_message));
+    memcpy(&send_buffer[sizeof(send_client_message)], next_message.c_str(), strlen(next_message.c_str())); // Use strlen here to not include null terminator
+    ret = sendto(udp_socket, &send_buffer, sizeof(send_buffer), 0,
+               (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+    if (ret == -1){
+      std::cerr << "Message failed to send!" << std::endl;
+      std::cerr << strerror(errno) << std::endl;
+      }
     next_message = get_message();
   }
 

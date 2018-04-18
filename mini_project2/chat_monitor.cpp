@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
   int ret;
   // IPv4 structure representing and IP address and port of the destination
   struct sockaddr_in dest_addr;
-
+  socklen_t dest_addr_len;
   struct sockaddr_in recv_addr;
   socklen_t recv_addr_len;
   char recv_buf[2048];
@@ -118,32 +118,66 @@ int main(int argc, char *argv[]) {
   // to ensure that the port is in big endian format
   dest_addr.sin_port = htons(port);
 
-  // Send a chatmon msg to register with the chat monitor
-
+  
   // Send the data to the destination.
-  // Note 1: we are sending strlen(data_string) + 1 to include the null terminator
-  // Note 2: we are casting dest_addr to a struct sockaddr because sendto uses the size
-  //         and family to determine what type of address it is.
+  // Note: Sending to and receiving from the same server so use the same addr (in this case dest_addr even though data it is a source address)
   // Note 3: the return value of sendto is the number of bytes sent
 
   // First we will send a connect monitor message.
-  ret = sendto(udp_socket, &client_message, sizeof(client_message), 0,
-               (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+  struct ChatMonMsg connect_server; // connect TO server
+  connect_server.type = htons(MON_CONNECT);
+  connect_server.nickname_len = 0;
+  connect_server.data_len = 0;
 
-  // Check if send worked, clean up and exit if not.
-  if (ret == -1) {
-    std::cerr << "Failed to send data!" << std::endl;
+ret = sendto(udp_socket, &connect_server, sizeof(connect_server), 0,
+               (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+  if (ret == -1){
+    std::cerr << "Failed to connect to server!" << std::endl;
     std::cerr << strerror(errno) << std::endl;
     close(udp_socket);
-    return 1;
   }
 
+  
+  
+  struct ChatMonMsg client_msg;
+  
   // After sending the connect monitor message, the monitor will just
   // sit and wait for messages to output. Easy peasy.
   while (stop == false) {
+    ret = recvfrom(udp_socket, &recv_buf, 2047, 0, (struct sockaddr *)&dest_addr, &dest_addr_len); // Receive up to 2048 bytes of data
+    
+    if (ret < 6) {
+      std::cerr << "Failed to recvfrom!" << std::endl;
+      std::cerr << strerror(errno) << std::endl;
+      close(udp_socket);
+      return 1;
+    }
+
+    memcpy(&client_msg, recv_buf, sizeof(client_msg));
+
+    client_msg.type = ntohs(client_msg.type);
+    client_msg.nickname_len = ntohs(client_msg.nickname_len);
+    client_msg.data_len = ntohs(client_msg.data_len);
+
+    char nickname_buf[client_msg.nickname_len + 1];
+    memcpy(nickname_buf, &recv_buf[sizeof(client_msg)], client_msg.nickname_len);
+    nickname_buf[client_msg.nickname_len + 1] = '\0';
+
+    char data_buf[client_msg.data_len + 1];
+    memcpy(data_buf, &recv_buf[6 + client_msg.nickname_len], client_msg.data_len);
+    data_buf[client_msg.nickname_len + 1] = '\0';
+
+    std::cout << nickname_buf << " said: " << data_buf << std::endl;
+
+
   }
 
   // Be nice and inform the server that we're no longer listening.
+  struct ChatMonMsg disconnect_msg;
+  disconnect_msg.type = htons(MON_DISCONNECT);
+  disconnect_msg.data_len = 0;
+  ret = sendto(udp_socket, &disconnect_msg, sizeof(disconnect_msg), 0,
+               (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
   std::cout << "Shut down message sent to server, exiting!\n";
 
   close(udp_socket);
