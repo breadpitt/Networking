@@ -1,12 +1,15 @@
-/**
+
+ /**
  * James Shannon
- * Project 1 
+ * Project 1
  */
 #include <algorithm>
 #include <cctype>
 #include <iomanip>
 #include <sstream>
-
+#include <vector>
+#include <fstream>
+#include <cstring>
 #include <iostream>
 #include <sys/socket.h>
 #include <errno.h>
@@ -14,6 +17,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include "SUCMS.h"
+#include <cerrno>
 
 using std::cin;
 using std::cout;
@@ -22,46 +26,42 @@ using std::getline;
 using std::istringstream;
 using std::string;
 using std::vector;
+using std::ifstream;
 
+std::vector<string> parseFile(string &filename) {
 
-void readPWFile(string file_name) {
-	pwFile.open(file_name, std::ios_base::in);
+	string line;
+	line.clear();
+	ifstream pwFile;
+	pwFile.open(filename);
 	if (!pwFile.is_open()) {
-		cerr << "ERROR: failed to open trace file: " << file_name << "\n";
+		cerr << "ERROR: failed to open trace file: " << filename << "\n";
 		exit(2);
 	}
-}
-
-bool ParseFile(
-	string &line, string &cmd, vector<uint32_t> &cmdArgs) {
-	cmdArgs.clear();
-	line.clear();
-	cmd.clear();
-
-	
 	vector<string> loginString;
-	ifstream pwFile;
+	
 	int i = 0;
 	// Read next line
 	if (std::getline(pwFile, line)) {
 
-			// Make a string stream from command line
-			istringstream ss(line);
-			string token;
+		// Make a string stream from command line
+		istringstream ss(line);
+		string token;
 
-			while (getline(ss, token, ',')) {
-				ss.ignore();
-				loginString.push_back(token);
-				cout << loginString[i] << endl;
-				i++;
-			}
-		return true;
+		while (getline(ss, token, ',')) {
+			ss.ignore();
+			loginString.push_back(token);
+			cout << loginString[i] << std::endl;
+			i++;
+		}
+		return loginString;
 	}
 	else if (pwFile.eof()) {
-		return false;
+    cout << "Empty file error\n";
+		return loginString;
 	}
 	else {
-		cerr << "ERROR: getline failed for" << file_name << "\n";
+		cerr << "ERROR: getline failed for" << filename << "\n";
 		exit(2);
 	}
 }
@@ -81,8 +81,6 @@ int main(int argc, char *argv[]) {
   char *ip_string;
   // Alias for argv[2] for convenience
   char *port_string;
-  // Alias for argv[3] for convenience
-  char *data_string;
   // Port to send UDP data to. Need to convert from command line string to a number
   unsigned int port;
   // The socket used to send UDP data on
@@ -91,20 +89,45 @@ int main(int argc, char *argv[]) {
   int ret;
   // IPv4 structure representing and IP address and port of the destination
   struct sockaddr_in dest_addr;
+  // Variable used to store a user's name
+  string username;
+  // Variable used to store a user's password
+  string password;
+  // Variable used to store a user's permissions
+  string permissions;
 
   // Set dest_addr to all zeroes, just to make sure it's not filled with junk
   // Note we could also make it a static variable, which will be zeroed before execution
-  memset(&dest_addr, 0, sizeof(struct sockaddr_in));
+ // memset(&dest_addr, 0, sizeof(struct sockaddr_in));
 
   // Note: this needs to be 4, because the program name counts as an argument!
   if (argc < 4) {
-    std::cerr << "Please specify IP PORT DATA as first three arguments." << std::endl;
+    std::cerr << "Please specify IP PORT FILE as first three arguments." << std::endl;
     return 1;
   }
   // Set up variables "aliases"
   ip_string = argv[1];
   port_string = argv[2];
-  data_string = argv[3];
+  string fileName(argv[3]);
+
+
+
+  vector<string> loginArgs = parseFile(fileName);
+  username = loginArgs[0];
+  password = loginArgs[1];
+  permissions = loginArgs[2];
+
+  
+  CommandMessage initList;
+  initList.username_len = username.length();
+  initList.command = 80;
+  MD5(password.c_str(), strlen(password.c_str(), initList.password_hash));
+
+
+  SUCMSHeader initHeader;
+  initHeader.sucms_msg_type = 50; // Command type
+  initHeader.length = password.length() + 16;
+
 
   // Create the UDP socket.
   // AF_INET is the address family used for IPv4 addresses
@@ -114,7 +137,6 @@ int main(int argc, char *argv[]) {
   // Make sure socket was created successfully, or exit.
   if (udp_socket == -1) {
     std::cerr << "Failed to create udp socket!" << std::endl;
-    std::cerr << strerror(errno) << std::endl;
     return 1;
   }
 
@@ -127,7 +149,6 @@ int main(int argc, char *argv[]) {
   // Check whether the specified IP was parsed properly. If not, exit.
   if (ret == -1) {
     std::cerr << "Failed to parse IPv4 address!" << std::endl;
-    std::cerr << strerror(errno) << std::endl;
     close(udp_socket);
     return 1;
   }
@@ -138,7 +159,6 @@ int main(int argc, char *argv[]) {
   // If not, exit.
   if (ret != 1) {
     std::cerr << "Failed to parse port!" << std::endl;
-    std::cerr << strerror(errno) << std::endl;
     close(udp_socket);
     return 1;
   }
@@ -154,13 +174,12 @@ int main(int argc, char *argv[]) {
   // Note 2: we are casting dest_addr to a struct sockaddr because sendto uses the size
   //         and family to determine what type of address it is.
   // Note 3: the return value of sendto is the number of bytes sent
-  ret = sendto(udp_socket, data_string, strlen(data_string) + 1, 0,
+  ret = sendto(udp_socket, data_string, std::strlen(data_string) + 1, 0,
                (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
 
   // Check if send worked, clean up and exit if not.
   if (ret == -1) {
     std::cerr << "Failed to send data!" << std::endl;
-    std::cerr << strerror(errno) << std::endl;
     close(udp_socket);
     return 1;
   }
