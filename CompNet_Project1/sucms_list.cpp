@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include "SUCMS.h"
 #include <cerrno>
+#include <openssl/md5.h>
 
 using std::cin;
 using std::cout;
@@ -33,7 +34,7 @@ std::vector<string> parseFile(string &filename) {
 	string line;
 	line.clear();
 	ifstream pwFile;
-	pwFile.open(filename);
+	pwFile.open(filename.c_str());
 	if (!pwFile.is_open()) {
 		cerr << "ERROR: failed to open trace file: " << filename << "\n";
 		exit(2);
@@ -101,34 +102,40 @@ int main(int argc, char *argv[]) {
  // memset(&dest_addr, 0, sizeof(struct sockaddr_in));
 
   // Note: this needs to be 4, because the program name counts as an argument!
-  if (argc < 4) {
-    std::cerr << "Please specify IP PORT FILE as first three arguments." << std::endl;
+  if (argc < 3) { // change back to 4 after hard code testing
+    std::cerr << "Please specify IP PORT FILE as first three arguments." << std::endl; 
     return 1;
   }
   // Set up variables "aliases"
   ip_string = argv[1];
   port_string = argv[2];
-  string fileName(argv[3]);
+  //string fileName(argv[3]);
 
 
-
-  vector<string> loginArgs = parseFile(fileName);
-  username = loginArgs[0];
-  password = loginArgs[1];
-  permissions = loginArgs[2];
-
+  // uncomment after hardcode testing
+  //vector<string> loginArgs = parseFile(fileName); // Open the file and sequentially parse the contents into a vector
+  //username = loginArgs[0]; 
+  //password = loginArgs[1];
+  //permissions = loginArgs[2];
+  username = "nate";
+  password = "test";
+  permissions = "rwd";
   
-  CommandMessage initList;
-  initList.username_len = username.length();
-  initList.command = 80;
-  MD5(password.c_str(), strlen(password.c_str(), initList.password_hash));
+  CommandMessage initList; // Create the command message
+  initList.username_len = strlen(username.c_str());
+  initList.command = 80; // 80 is LIST
+  MD5((unsigned char *)password.c_str(), strlen(password.c_str()), initList.password_hash); // strlen won't include \0 iirc
 
 
   SUCMSHeader initHeader;
   initHeader.sucms_msg_type = 50; // Command type
-  initHeader.length = password.length() + 16;
+  initHeader.sucms_msg_length = sizeof(initList); // sizeof is the count of all the bytes
 
+  uint16_t *initBuff = new uint16_t[sizeof(initHeader) + sizeof(initList) + strlen(password.c_str())]; // construct a buffer, add the header to it, then append in the command message and username
 
+  memcpy(initBuff, (const void *)&initHeader, sizeof(initHeader));
+  memcpy(initBuff + sizeof(initHeader), (const void *)&initList, sizeof(initList));
+  memcpy(initBuff + sizeof(initHeader) + sizeof(initList), username.c_str(), initList.username_len);
   // Create the UDP socket.
   // AF_INET is the address family used for IPv4 addresses
   // SOCK_DGRAM indicates creation of a UDP socket
@@ -174,7 +181,7 @@ int main(int argc, char *argv[]) {
   // Note 2: we are casting dest_addr to a struct sockaddr because sendto uses the size
   //         and family to determine what type of address it is.
   // Note 3: the return value of sendto is the number of bytes sent
-  ret = sendto(udp_socket, data_string, std::strlen(data_string) + 1, 0,
+ ret = sendto(udp_socket, initBuff, sizeof(initBuff), 0,
                (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
 
   // Check if send worked, clean up and exit if not.
