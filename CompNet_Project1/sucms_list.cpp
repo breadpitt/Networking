@@ -90,6 +90,11 @@ int main(int argc, char *argv[]) {
   int ret;
   // IPv4 structure representing and IP address and port of the destination
   struct sockaddr_in dest_addr;
+  // IPv4 structure representing the IP address and port of responding server
+  struct sockaddr_in server_addr;
+  // Holds the length of the server ip address
+  socklen_t server_addr_length;
+  server_addr_length = sizeof(struct sockaddr_in);
   // Variable used to store a user's name
   string username;
   // Variable used to store a user's password
@@ -117,25 +122,56 @@ int main(int argc, char *argv[]) {
   //username = loginArgs[0]; 
   //password = loginArgs[1];
   //permissions = loginArgs[2];
-  username = "nate";
-  password = "test";
-  permissions = "rwd";
+    std::cout << "Please enter your username: \n";
+    std::cin >> username;
+    std::cout << "Please enter your password: \n";
+    std::cin >> password;
+    //permissions = "rwd";
   
   CommandMessage initList; // Create the command message
   initList.username_len = strlen(username.c_str());
   initList.command = 80; // 80 is LIST
+  
   MD5((unsigned char *)password.c_str(), strlen(password.c_str()), initList.password_hash); // strlen won't include \0 iirc
-
+   
 
   SUCMSHeader initHeader;
   initHeader.sucms_msg_type = 50; // Command type
-  initHeader.sucms_msg_length = sizeof(initList); // sizeof is the count of all the bytes
+  initHeader.sucms_msg_length = sizeof(initList) + initList.username_len; // sizeof is the count of all the bytes
+  
+  uint16_t initHeaderSize = sizeof(initHeader);
+  int initListSize = sizeof(initList);
+  int initBufSize = sizeof(initList) + sizeof(initHeader) + initList.username_len;
+ 
+  uint16_t initBuf[initBufSize]; // construct a buffer, add the header to it, then append in the command message and username
+  std::vector<uint16_t> initVector;
+  initVector.push_back(initHeader.sucms_msg_type);
+  initVector.push_back(initHeader.sucms_msg_length);
+  initVector.push_back(initList.username_len);
+  initVector.push_back(initList.command);
+  for (int i = 0; i < sizeof(initList.password_hash); i++){
+    initVector.push_back(initList.password_hash[i]);
+  }
+  std::vector<uint16_t> convertVec(username.begin(), username.end());
+  for (int i = 0; i < initList.username_len; i++){
+    initVector.push_back(convertVec[i]);
+  }
+  uint16_t* initMessage = initVector.data();
+  //initMessage = new uint16_t[initVector.size()];
+  std::copy(initVector.begin(), initVector.end(), initMessage);
+   std::cout << "Size of initMessage: " <<  sizeof(initMessage) << "\n";
+  /*
+  memcpy(initBuf, (const void *)&initHeader, sizeof(initHeader));
+  std::cout << "Size of headersize: " <<  initHeaderSize << "\n";
+  std::cout << "Size of listsize: " <<  initListSize << "\n";
+  memcpy(initBuf + initHeaderSize, (const void *)&initList, sizeof(initList));
+   std::cout << "Size of bufsize: " <<  initBufSize << "\n";
+  memcpy(initBuf + initHeaderSize + initListSize, username.c_str(), initList.username_len);
+  */
+  for (int i = 0; i <sizeof(initMessage); i++){
+    printf(" %u ", (unsigned int)initMessage[i] );
 
-  uint16_t *initBuff = new uint16_t[sizeof(initHeader) + sizeof(initList) + strlen(password.c_str())]; // construct a buffer, add the header to it, then append in the command message and username
-
-  memcpy(initBuff, (const void *)&initHeader, sizeof(initHeader));
-  memcpy(initBuff + sizeof(initHeader), (const void *)&initList, sizeof(initList));
-  memcpy(initBuff + sizeof(initHeader) + sizeof(initList), username.c_str(), initList.username_len);
+  }
   // Create the UDP socket.
   // AF_INET is the address family used for IPv4 addresses
   // SOCK_DGRAM indicates creation of a UDP socket
@@ -181,7 +217,7 @@ int main(int argc, char *argv[]) {
   // Note 2: we are casting dest_addr to a struct sockaddr because sendto uses the size
   //         and family to determine what type of address it is.
   // Note 3: the return value of sendto is the number of bytes sent
- ret = sendto(udp_socket, initBuff, sizeof(initBuff), 0,
+ ret = sendto(udp_socket, &initVector[0], initVector.size(), 0,
                (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
 
   // Check if send worked, clean up and exit if not.
@@ -193,10 +229,36 @@ int main(int argc, char *argv[]) {
 
   std::cout << "Sent " << ret << " bytes out." << std::endl;
 
-  /**
-   * Code to receive response from the server goes here!
-   * recv or recvfrom...
-   */
+  // The header & response should only be about 7 uint_16s but I'm adding some buffer to my buffer
+  //  just in case I messed up my counting, which is always possible
+  uint16_t recvfrom_buf[32];
+  uint16_t messageType, messageLength; // sucms message type and length
+  uint16_t commandCode, resultID, messageCount; // command response variables
+  uint32_t messageDataSize; // Size of data received by command response 
+  ret = recvfrom(udp_socket, &recvfrom_buf, 31, 0, (struct sockaddr *)&server_addr, &server_addr_length); // Receive up to 64 bytes of data
+
+  if (ret < 4) {
+    std::cerr << "Failed to recvfrom!" << std::endl;
+    std::cerr << strerror(errno) << std::endl;
+    close(udp_socket);
+    return 1;
+  }
+
+  messageType = ntohs(recvfrom_buf[0]);
+  std::cout << "messageType: " << messageType << "\n";
+  messageLength = ntohs(recvfrom_buf[1]);
+  std::cout << "messageLength: " << messageLength << "\n";
+  commandCode = ntohs(recvfrom_buf[2]);
+  std::cout << "commandCode: " << commandCode << "\n";
+  resultID = ntohs(recvfrom_buf[3]);
+  // 32 bit variable likely got chopped up into two 16 bit slots so we need to cast, shift, and cat in order to get it back into the right format
+  messageDataSize = (ntohs((uint32_t)recvfrom_buf[4]) << 16) | ntohs(recvfrom_buf[5]);
+  std::cout << "messageDataSize: " << messageDataSize << "\n";
+  messageCount = (ntohs(recvfrom_buf[6])); 
+  std::cout << "messageCount: " << messageCount << "\n";
+
+
+
 
   close(udp_socket);
   return 0;
