@@ -156,10 +156,7 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < initList.username_len; i++){
     initVector.push_back(convertVec[i]);
   }
-  uint16_t* initMessage = initVector.data();
-  //initMessage = new uint16_t[initVector.size()];
-  std::copy(initVector.begin(), initVector.end(), initMessage);
-   std::cout << "Size of initMessage: " <<  sizeof(initMessage) << "\n";
+  
   /*
   memcpy(initBuf, (const void *)&initHeader, sizeof(initHeader));
   std::cout << "Size of headersize: " <<  initHeaderSize << "\n";
@@ -168,8 +165,8 @@ int main(int argc, char *argv[]) {
    std::cout << "Size of bufsize: " <<  initBufSize << "\n";
   memcpy(initBuf + initHeaderSize + initListSize, username.c_str(), initList.username_len);
   */
-  for (int i = 0; i <sizeof(initMessage); i++){
-    printf(" %u ", (unsigned int)initMessage[i] );
+  for (int i = 0; i <initVector.size(); i++){
+    printf(" %u ", (unsigned int)initVector[i] );
 
   }
   // Create the UDP socket.
