@@ -31,6 +31,20 @@ using std::string;
 using std::vector;
 using std::ifstream;
 
+std::string get_username() {
+std::string username;
+std::cout << "Enter username: ";
+std::getline(std::cin, username);
+return username;
+}
+
+std::string get_password(){
+std::string password;
+std::cout << "Enter password: ";
+std::getline(std::cin, password);
+return password;
+}
+
 int main(int argc, char *argv[]) {
   // Alias for argv[1] for convenience
   char *ip_string;
@@ -76,13 +90,16 @@ int main(int argc, char *argv[]) {
   //string fileName(argv[3]);
 
 
-  
+    /*
     std::cout << "Please enter your username: \n";
     std::cin >> username;
     std::cout << "Please enter your password: \n";
     std::cin >> password;
     //permissions = "rwd";
-  
+    */
+
+   get_username();
+   get_password();
   
   // Create the UDP socket. AF_INET used for IPv4 addresses. SOCK_DGRAM indicates creation of a UDP socket
   udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -241,8 +258,6 @@ CommandMessage initList; // Create the command message
 
 
   resultID = ntohs(recv_buf[3]);
-
-  // 32 bit variable likely got chopped up into two 16 bit slots so we need to cast, shift, and cat in order to get it back into the right format
   messageDataSize = ntohl(recv_buf[4]);
   std::cout << "messageDataSize: " << messageDataSize << "\n";
   messageCount = (ntohs(recv_buf[6])); 
