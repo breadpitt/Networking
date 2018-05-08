@@ -15,6 +15,8 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #include <unistd.h>
 #include "SUCMS.h"
 #include <cerrno>
@@ -29,17 +31,6 @@ using std::string;
 using std::vector;
 using std::ifstream;
 
-/**
- *
- * Dead simple UDP client example. Reads in IP PORT DATA
- * from the command line, and sends DATA via UDP to IP:PORT.
- *
- * e.g., ./udpclient 127.0.0.1 8888 this_is_some_data_to_send
- *
- * @param argc count of arguments on the command line
- * @param argv array of command line arguments
- * @return 0 on success, non-zero if an error occurred
- */
 int main(int argc, char *argv[]) {
   // Alias for argv[1] for convenience
   char *ip_string;
@@ -66,8 +57,12 @@ int main(int argc, char *argv[]) {
   // Variable used to store a user's permissions
   string permissions;
 
+  struct addrinfo hints;
+  struct addrinfo *results;
+
+  
+
   // Set server_addr to all zeroes, just to make sure it's not filled with junk
-  // Note we could also make it a static variable, which will be zeroed before execution
   memset(&server_addr, 0, sizeof(struct sockaddr_in));
 
   // Note: this needs to be 4, because the program name counts as an argument!
@@ -81,11 +76,7 @@ int main(int argc, char *argv[]) {
   //string fileName(argv[3]);
 
 
-  // uncomment after hardcode testing
-  //vector<string> loginArgs = parseFile(fileName); // Open the file and sequentially parse the contents into a vector
-  //username = loginArgs[0]; 
-  //password = loginArgs[1];
-  //permissions = loginArgs[2];
+  
     std::cout << "Please enter your username: \n";
     std::cin >> username;
     std::cout << "Please enter your password: \n";
@@ -96,12 +87,41 @@ int main(int argc, char *argv[]) {
   // Create the UDP socket. AF_INET used for IPv4 addresses. SOCK_DGRAM indicates creation of a UDP socket
   udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
-  // Make sure socket was created successfully, or exit.
   if (udp_socket == -1) {
     std::cerr << "Failed to create udp socket!" << std::endl;
     return 1;
   }
 
+  memset(&hints, 0, sizeof(struct addrinfo));
+  hints.ai_addr = NULL;
+  hints.ai_canonname = NULL;
+  hints.ai_family = AF_INET;
+  hints.ai_protocol = 0;
+  hints.ai_flags = AI_PASSIVE;
+  hints.ai_socktype = SOCK_DGRAM;
+  char hostname[NI_MAXHOST];
+
+  ret = getaddrinfo(ip_string, port_string, &hints, &results);
+  if (ret != 0) {
+    std::cerr << "Getaddrinfo failed with error " << ret << std::endl;
+    perror("getaddrinfo");
+    return 1;
+  }
+
+  if (results != NULL){
+    std::cout << "Trying to connect \n";
+    ret = connect(udp_socket, results->ai_addr, results->ai_addrlen);
+      if (ret != 0){
+        freeaddrinfo(results);
+        std::cout << "Failure to connect to " << ip_string << "\n";
+        return 1;
+      }
+  }
+  std::cout << "Connection Successful\nSending Data\n";
+  //getnameinfo(results->ai_addr, results->ai_addrlen, hostname, NI_MAXHOST, NULL, 0, 0);
+  //printf("hostname: %s\n", hostname);
+  freeaddrinfo(results);
+  /*
   // inet_pton converts an ip addr str into the required format
   // Note that because server_addr is a sockaddr_in (again, IPv4) the 'sin_addr'
   // member of the struct is used for the IP
@@ -113,10 +133,9 @@ int main(int argc, char *argv[]) {
     close(udp_socket);
     return 1;
   }
-
+  
   // Convert the port string into an unsigned integer.
   ret = sscanf(port_string, "%u", &port);
-  // sscanf is called with one argument to convert, so the result should be 1
   if (ret != 1) {
     std::cerr << "Failed to parse port!" << std::endl;
     close(udp_socket);
@@ -128,72 +147,47 @@ int main(int argc, char *argv[]) {
   // Set the destination port. Use htons (host to network short)
   // to ensure that the port is in big endian format
   server_addr.sin_port = htons(port);
-
+  */
 
 CommandMessage initList; // Create the command message
   initList.username_len = strlen(username.c_str());
   initList.command = 80; // 80 is LIST
   
   MD5((unsigned char *)password.c_str(), 
-          strlen(password.c_str()), initList.password_hash); // strlen won't include \0 iirc
+          strlen(password.c_str()), initList.password_hash); 
    
 
   SUCMSHeader initHeader;
   initHeader.sucms_msg_type = 50; // Command type
-  initHeader.sucms_msg_length = sizeof(initList) + initList.username_len; // want the count of all the bytes , multiply by 2?
+  initHeader.sucms_msg_length = sizeof(initList) + initList.username_len; 
   
   int initHeaderSize = sizeof(initHeader);
   int initListSize = sizeof(initList);
   
-  
-  /*
-  //uint16_t initBuf[initBufSize]; // construct a buffer, add the header to it, then append in the command message and username
-  std::vector<uint16_t> initVector;
-  initVector.push_back(htons(initHeader.sucms_msg_type));
-  initVector.push_back(htons(initHeader.sucms_msg_length));
-  initVector.push_back(htons(initList.username_len));
-  initVector.push_back(htons(initList.command));
-  for (int i = 0; i < sizeof(initList.password_hash); i++){
-    initVector.push_back(initList.password_hash[i]);
-  }
-  */
+ 
   int username_length = strlen(username.c_str());
   //std::cout << "before: " << initHeader.sucms_msg_type << std::endl; -> test htons was working right.. it was
   initHeader.sucms_msg_type = htons(initHeader.sucms_msg_type);
   //std::cout << "after: " << initHeader.sucms_msg_type << std::endl;
    initHeader.sucms_msg_type = ntohs(initHeader.sucms_msg_type);
    // std::cout << "after after: " << initHeader.sucms_msg_type << std::endl;
- // initHeader.sucms_msg_length = htons(initHeader.sucms_msg_length);
- // initList.username_len = htons(initList.username_len);
- // initList.command = htons(initList.command);
+  initHeader.sucms_msg_length = htons(initHeader.sucms_msg_length);
+  initList.username_len = htons(initList.username_len);
+  initList.command = htons(initList.command);
+
+  // Create and populate buffer used to send initial message to server
   uint16_t initBuf[sizeof(initHeader) + sizeof(initList) + username_length];
   int initBufSize = sizeof(initList) + sizeof(initHeader) + username_length;
    
   memcpy(initBuf, &initHeader, sizeof(initHeader));
   memcpy(initBuf + sizeof(initHeader), &initList, sizeof(initList));
   memcpy(initBuf + sizeof(initHeader) + sizeof(initList), username.c_str(), strlen(username.c_str()));
-  //initVector.push_back(username.c_str());
-  //int vsize = initVector.size();
-  ///memcpy(initVector.end, username.c_str(), initList.username_len);
   
-  ///for (int i = 0; i <initVector.size(); i++){
-   // printf(" %u ", (unsigned int)initVector[i] );
-
-  //}
-
-//for (int i = 0; i < vector.size(); i++){
-   //&initVector[i] = (void *)htons(&initVector[i]);
-//}
-  //uint16_t* initBuf;
-  //initBuf = new uint16_t[initVector.size()];
-  //initBuf = htons(&initVector[0]);
-  // Send the data to the destination.
   // Note 1: we are sending strlen(data_string) + 1 to include the null terminator
   // Note 2: we are casting server_addr to a struct sockaddr because sendto uses the size
   //         and family to determine what type of address it is.
   // Note 3: the return value of sendto is the number of bytes sent
- ret = sendto(udp_socket, initBuf, sizeof(initBuf), 0,
-               (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in));
+ ret = send(udp_socket, initBuf, sizeof(initBuf), 0);
 
   // Check if send worked, clean up and exit if not.
   if (ret == -1) {
@@ -249,7 +243,7 @@ CommandMessage initList; // Create the command message
   resultID = ntohs(recv_buf[3]);
 
   // 32 bit variable likely got chopped up into two 16 bit slots so we need to cast, shift, and cat in order to get it back into the right format
-  messageDataSize = (ntohs((uint32_t)recv_buf[4]) << 16) | ntohs(recv_buf[5]);
+  messageDataSize = ntohl(recv_buf[4]);
   std::cout << "messageDataSize: " << messageDataSize << "\n";
   messageCount = (ntohs(recv_buf[6])); 
   std::cout << "messageCount: " << messageCount << "\n";
