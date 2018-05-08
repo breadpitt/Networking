@@ -139,38 +139,43 @@ CommandMessage initList; // Create the command message
 
   SUCMSHeader initHeader;
   initHeader.sucms_msg_type = 50; // Command type
-  initHeader.sucms_msg_length = sizeof(initList) + initList.username_len; // sizeof is the count of all the bytes
+  initHeader.sucms_msg_length = sizeof(initList) + initList.username_len; // want the count of all the bytes , multiply by 2?
   
   uint16_t initHeaderSize = sizeof(initHeader);
   int initListSize = sizeof(initList);
   int initBufSize = sizeof(initList) + sizeof(initHeader) + initList.username_len;
  
-  uint16_t initBuf[initBufSize]; // construct a buffer, add the header to it, then append in the command message and username
+  //uint16_t initBuf[initBufSize]; // construct a buffer, add the header to it, then append in the command message and username
   std::vector<uint16_t> initVector;
-  initVector.push_back(initHeader.sucms_msg_type);
-  initVector.push_back(initHeader.sucms_msg_length);
-  initVector.push_back(initList.username_len);
-  initVector.push_back(initList.command);
+  initVector.push_back(htons(initHeader.sucms_msg_type));
+  initVector.push_back(htons(initHeader.sucms_msg_length));
+  initVector.push_back(htons(initList.username_len));
+  initVector.push_back(htons(initList.command));
   for (int i = 0; i < sizeof(initList.password_hash); i++){
     initVector.push_back(initList.password_hash[i]);
   }
-  std::vector<uint16_t> convertVec(username.begin(), username.end());
-  for (int i = 0; i < initList.username_len; i++){
-    initVector.push_back(convertVec[i]);
-  }
   
+  //initVector.push_back(username.c_str());
+  int vsize = initVector.size();
+  memcpy(initVector.end; username.c_str(), initList.username_len);
   
   for (int i = 0; i <initVector.size(); i++){
     printf(" %u ", (unsigned int)initVector[i] );
 
   }
 
+//for (int i = 0; i < vector.size(); i++){
+   //&initVector[i] = (void *)htons(&initVector[i]);
+//}
+  //uint16_t* initBuf;
+  //initBuf = new uint16_t[initVector.size()];
+  //initBuf = htons(&initVector[0]);
   // Send the data to the destination.
   // Note 1: we are sending strlen(data_string) + 1 to include the null terminator
   // Note 2: we are casting server_addr to a struct sockaddr because sendto uses the size
   //         and family to determine what type of address it is.
   // Note 3: the return value of sendto is the number of bytes sent
- ret = sendto(udp_socket, &initVector[0], sizeof(initVector[0]) * initVector.size(), 0,
+ ret = sendto(udp_socket, &initVector[0], sizeof(uint16_t) * initVector.size(), 0,
                (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in));
 
   // Check if send worked, clean up and exit if not.
@@ -190,7 +195,7 @@ CommandMessage initList; // Create the command message
   uint32_t messageDataSize; // Size of data received by command response
   //int from_addr_length;
   //from_addr_length = sizeof(from); 
-  ret = recvfrom(udp_socket, &recv_buf, sizeof(recv_buf) - 1, 0, &from, &from_addr_length); // Receive up to 1024 bytes of data
+  ret = recv(udp_socket, &recv_buf, sizeof(recv_buf) - 1, 0); // Receive up to 1024 bytes of data
 
   if (ret < 4) {
     std::cerr << "Failed to recvfrom!" << std::endl;
@@ -207,12 +212,33 @@ CommandMessage initList; // Create the command message
   std::cout << "messageLength: " << messageLength << "\n";
   commandCode = ntohs(recv_buf[2]);
   std::cout << "commandCode: " << commandCode << "\n";
+  
+  switch(commandCode){
+      case 10 : std::cout << "AUTH_OK\n";
+        break;
+      case 11 : std::cout << "AUTH_FAILED\n";
+        break;
+      case 12 : std::cout << "ACCESS_DENIED\n";
+        break;
+      case 13 : std::cout << "NO_SUCH_FILE\n";
+        break;
+      case 14 : std::cout << "INVALID_RESULT_ID\n";
+        break;
+      case 15 : std::cout << "INTERNAL_SERVER_ERROR\n";
+        break;
+      case 16 : std::cout <<  "INVALID_CLIENT_MESSAGE\n";
+  }
+
+
   resultID = ntohs(recv_buf[3]);
+
   // 32 bit variable likely got chopped up into two 16 bit slots so we need to cast, shift, and cat in order to get it back into the right format
   messageDataSize = (ntohs((uint32_t)recv_buf[4]) << 16) | ntohs(recv_buf[5]);
   std::cout << "messageDataSize: " << messageDataSize << "\n";
   messageCount = (ntohs(recv_buf[6])); 
   std::cout << "messageCount: " << messageCount << "\n";
+
+
 
 
 
