@@ -65,9 +65,9 @@ int main(int argc, char *argv[]) {
   socklen_t from_addr_length;
   from_addr_length = sizeof(struct sockaddr);
   // Variable used to store a user's name
-  string username;
+  string username = "nate";
   // Variable used to store a user's password
-  string password;
+  string password = "test";
   // Variable used to store a user's permissions
   string permissions;
 
@@ -75,10 +75,6 @@ int main(int argc, char *argv[]) {
   struct addrinfo *results;
 
   
-
-  // Set server_addr to all zeroes, just to make sure it's not filled with junk
-  memset(&server_addr, 0, sizeof(struct sockaddr_in));
-
   // Note: this needs to be 4, because the program name counts as an argument!
   if (argc < 3) { // change back to 4 after hard code testing
     std::cerr << "Please specify IP PORT FILE as first three arguments." << std::endl; 
@@ -89,8 +85,9 @@ int main(int argc, char *argv[]) {
   port_string = argv[2];
   //string fileName(argv[3]);
 
-
     /*
+    std::string username;
+    std::string password;
     std::cout << "Please enter your username: \n";
     std::cin >> username;
     std::cout << "Please enter your password: \n";
@@ -98,8 +95,8 @@ int main(int argc, char *argv[]) {
     //permissions = "rwd";
     */
 
-   get_username();
-   get_password();
+   //get_username();
+   //get_password();
   
   // Create the UDP socket. AF_INET used for IPv4 addresses. SOCK_DGRAM indicates creation of a UDP socket
   udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -172,33 +169,32 @@ CommandMessage initList; // Create the command message
   
   MD5((unsigned char *)password.c_str(), 
           strlen(password.c_str()), initList.password_hash); 
-   
+  unsigned char passwordHash[16];
+  memcpy(passwordHash, initList.password_hash, sizeof(initList.password_hash)); 
 
   SUCMSHeader initHeader;
   initHeader.sucms_msg_type = 50; // Command type
   initHeader.sucms_msg_length = sizeof(initList) + initList.username_len; 
-  
+  //initHeader.sucms_msg_type = htons(initHeader.sucms_msg_type);
+  //initHeader.sucms_msg_length = htons(initHeader.sucms_msg_length);
+
   int initHeaderSize = sizeof(initHeader);
   int initListSize = sizeof(initList);
   
  
-  int username_length = strlen(username.c_str());
-  //std::cout << "before: " << initHeader.sucms_msg_type << std::endl; -> test htons was working right.. it was
+  uint16_t username_length = strlen(username.c_str());
   initHeader.sucms_msg_type = htons(initHeader.sucms_msg_type);
-  //std::cout << "after: " << initHeader.sucms_msg_type << std::endl;
-   initHeader.sucms_msg_type = ntohs(initHeader.sucms_msg_type);
-   // std::cout << "after after: " << initHeader.sucms_msg_type << std::endl;
   initHeader.sucms_msg_length = htons(initHeader.sucms_msg_length);
   initList.username_len = htons(initList.username_len);
   initList.command = htons(initList.command);
 
   // Create and populate buffer used to send initial message to server
-  uint16_t initBuf[sizeof(initHeader) + sizeof(initList) + username_length];
-  int initBufSize = sizeof(initList) + sizeof(initHeader) + username_length;
+  char initBuf[24 + strlen(username.c_str())];
+  //int initBufSize = sizeof(initList) + sizeof(initHeader) + username_length;
    
-  memcpy(initBuf, &initHeader, sizeof(initHeader));
-  memcpy(initBuf + sizeof(initHeader), &initList, sizeof(initList));
-  memcpy(initBuf + sizeof(initHeader) + sizeof(initList), username.c_str(), strlen(username.c_str()));
+  memcpy(&initBuf[0], &initHeader, initHeaderSize);
+  memcpy(&initBuf[4], &initList, initListSize);
+  strcpy(&initBuf[24], username.c_str());
   
   // Note 1: we are sending strlen(data_string) + 1 to include the null terminator
   // Note 2: we are casting server_addr to a struct sockaddr because sendto uses the size
@@ -217,7 +213,7 @@ CommandMessage initList; // Create the command message
 
   
   uint16_t recv_buf[2048];
-  uint16_t messageType, messageLength; // sucms message type and length
+  uint16_t commandResponse, messageLength; // sucms message type and length
   uint16_t commandCode, resultID, messageCount; // command response variables
   uint32_t messageDataSize; // Size of data received by command response
   //int from_addr_length;
@@ -233,12 +229,19 @@ CommandMessage initList; // Create the command message
   recv_buf[ret] = '\0';
   
   std::cout << "Received " << ret << " bytes." << std::endl;
-  messageType = ntohs(recv_buf[0]);
-  std::cout << "messageType: " << messageType << "\n";
+  commandResponse = ntohs(recv_buf[0]);
+  std::cout << "messageType: " << commandResponse << "\n";
   messageLength = ntohs(recv_buf[1]);
   std::cout << "messageLength: " << messageLength << "\n";
   commandCode = ntohs(recv_buf[2]);
   std::cout << "commandCode: " << commandCode << "\n";
+  resultID = ntohs(recv_buf[3]);
+  std::cout << "result id: " << resultID << "\n";
+  messageDataSize = ntohl(recv_buf[4]);
+  std::cout << "message data size: " << messageDataSize << "\n";
+  messageCount = ntohs(recv_buf[5]);
+  std::cout << "message count: " << messageCount << "\n";
+  
   
   switch(commandCode){
       case 10 : std::cout << "AUTH_OK\n";
@@ -257,13 +260,86 @@ CommandMessage initList; // Create the command message
   }
 
 
-  resultID = ntohs(recv_buf[3]);
-  messageDataSize = ntohl(recv_buf[4]);
-  std::cout << "messageDataSize: " << messageDataSize << "\n";
-  messageCount = (ntohs(recv_buf[6])); 
-  std::cout << "messageCount: " << messageCount << "\n";
+  SUCMSHeader clientResponseHeader;
+    clientResponseHeader.sucms_msg_type = htons(50);
+    clientResponseHeader.sucms_msg_length = htons(30 + username_length); // fill in later
+
+  CommandMessage listGet;
+    listGet.username_len = htons(username_length);
+    listGet.command = htons(80); // 80 is list
+    listGet.password_hash;
+
+  SUCMSClientGetResult getResult;
+    getResult.command_type = htons(80);
+    getResult.result_id = htons(resultID);
 
 
+  // Create and populate buffer used to send initial message to server
+  char getListBuf[30 + username_length];
+   
+  memcpy(&getListBuf[0], &clientResponseHeader, sizeof(clientResponseHeader));
+  memcpy(&getListBuf[4], &listGet, sizeof(listGet));
+  strcpy(&getListBuf[24], username.c_str());
+  int sizebuf = 24 + username_length;
+  memcpy(&getListBuf[sizebuf], &getResult, sizeof(getResult));
+  // Note 1: we are sending strlen(data_string) + 1 to include the null terminator
+  // Note 2: we are casting server_addr to a struct sockaddr because sendto uses the size
+  //         and family to determine what type of address it is.
+  // Note 3: the return value of sendto is the number of bytes sent
+ ret = send(udp_socket, getListBuf, sizeof(getListBuf), 0);
+
+  // Check if send worked, clean up and exit if not.
+  if (ret == -1) {
+    std::cerr << "Failed to send data!" << std::endl;
+    close(udp_socket);
+    return 1;
+  }
+
+  std::cout << "Sent " << ret << " bytes out." << std::endl;
+
+uint16_t recvResultsBuf[1400]; 
+uint16_t messageType, filenameLen;//, messageLength commandResponse, messageCount, messageNumber, filenameLen, totalPieces;
+uint32_t fileSizeBytes; //messageDataSize, ;
+ret = recv(udp_socket, &recvResultsBuf, sizeof(recvResultsBuf) - 1, 0); // Receive up to 1399 bytes of data
+
+if (ret < 4) {
+  std::cerr << "Failed to recvfrom!" << std::endl;
+  std::cerr << strerror(errno) << std::endl;
+  close(udp_socket);
+  return 1;
+}
+recvResultsBuf[ret] = '\0';
+
+std::cout << "Received " << ret << " bytes." << std::endl;
+memcpy(&messageType, &recvResultsBuf[0], 2);
+messageType = ntohs(messageType);
+std::cout << "header code: " << commandResponse << "\n";
+memcpy(&messageLength, &recvResultsBuf[2], 2);
+messageLength = ntohs(messageLength);
+
+
+std::cout << "messageLength: " << messageLength << "\n";
+
+memcpy(&commandResponse, &recvResultsBuf[4], 2);
+commandResponse = ntohs(commandResponse);
+
+memcpy(&resultID, &recvResultsBuf[6], 2);
+resultID = ntohs(resultID);
+std::cout << "result id: " << resultID << "\n";
+ memcpy(&messageDataSize, &recvResultsBuf[8], 4);
+ messageDataSize = ntohs(messageDataSize);
+ std::cout << "message count : " << messageDataSize << "\n";
+ memcpy(&messageCount, &recvResultsBuf[12], 2);
+messageCount = ntohs(messageCount);
+std::cout << "messageCount : " << messageCount << "\n";
+//filenameLen = ntohs(recvResultsBuf[4]);
+
+//totalPieces = ntohs(recvResultsBuf[5]);
+//fileSizeBytes = ntohl(recvResultsBuf[6]);
+
+char filename[filenameLen];
+memcpy(&filename[0], &recvResultsBuf, filenameLen);
+std::cout << filename << std::endl;
 
 
 
