@@ -1,6 +1,7 @@
 
 /**
  * James Shannon
+ * 
  * Project 1
  */
 #include <algorithm>
@@ -144,18 +145,18 @@ int main(int argc, char *argv[])
 
   SUCMSHeader messageHeader;
   messageHeader.sucms_msg_type = 50; // Command type
-  messageHeader.sucms_msg_length = 20 + strlen(username.c_str()); //sizeof(commandMessage) + strlen(username.c_str());
+  messageHeader.sucms_msg_length = sizeof(commandMessage) + strlen(username.c_str()); // 20 + usrn len
 
   messageHeader.sucms_msg_type = htons(messageHeader.sucms_msg_type);
   messageHeader.sucms_msg_length = htons(messageHeader.sucms_msg_length);
 
-
+  int CmndHdrSize = sizeof(messageHeader) + sizeof(commandMessage); // 24
   // Create a buffer to send data
-  char sendBuf[sizeof(commandMessage) + sizeof(messageHeader) + strlen(username.c_str())];
+  char sendBuf[CmndHdrSize + strlen(username.c_str())];
 
-  memcpy(&sendBuf[0], &messageHeader, 4);
-  memcpy(&sendBuf[4], &commandMessage, 20);
-  strcpy(&sendBuf[24], username.c_str());
+  memcpy(&sendBuf[0], &messageHeader, sizeof(messageHeader));
+  memcpy(&sendBuf[sizeof(messageHeader)], &commandMessage, 20);
+  strcpy(&sendBuf[CmndHdrSize], username.c_str());
 
   // send first message with header | command message | username
   ret = send(udp_socket, sendBuf, sizeof(sendBuf), 0);
@@ -170,7 +171,7 @@ int main(int argc, char *argv[])
 
   // Set up to receive server header | command response
   uint16_t recvBuf[1400];                   // 1400 is about the largest a packet can be so let's make it that
-                                            // memset(&recvBuf, 0, 1400); // Clear buffer
+  memset(&recvBuf, 0, 1400); // Clear buffer
   ret = recv(udp_socket, &recvBuf, sizeof(recvBuf), 0); // Receive up to 1400 uint16s of data
   
   CommandResponse commandResponse;
@@ -187,24 +188,33 @@ int main(int argc, char *argv[])
   }
 
   std::cout << "Received " << ret << " bytes." << std::endl;
-  memcpy(&messageType, &recvBuf[0], 2);
+  int buffIndex = 0;
+  memcpy(&messageType, &recvBuf[0], sizeof(messageHeader.sucms_msg_type));
   messageHeader.sucms_msg_type = ntohs(messageType);
-  memcpy(&messageLength, &recvBuf[2], 2);
+  buffIndex = sizeof(messageHeader.sucms_msg_type); // 4
+  memcpy(&messageLength, &recvBuf[buffIndex], sizeof(messageHeader.sucms_msg_length));
+  buffIndex += sizeof(messageHeader.sucms_msg_length); // 8
   messageHeader.sucms_msg_length = ntohs(messageLength);
-  memcpy(&commandCode, &recvBuf[4], 2);
+  memcpy(&commandCode, &recvBuf[buffIndex], sizeof(commandResponse.command_response_code));
   commandResponse.command_response_code = ntohs(commandCode);
-  std::cout << "commandCode: " << commandResponse.command_response_code << "\n";
-  memcpy(&resultID, &recvBuf[6], 2);
+  buffIndex += sizeof(commandResponse.command_response_code); //12 
+  
+  memcpy(&resultID, &recvBuf[buffIndex], sizeof(commandResponse.result_id));
   commandResponse.result_id = ntohs(resultID);
-  std::cout << "result id: " << commandResponse.result_id << "\n";
-  memcpy(&messageDataSize, &recvBuf[8], 4);
+  buffIndex += sizeof(commandResponse.result_id); // 16
+  
+  memcpy(&messageDataSize, &recvBuf[buffIndex], sizeof(commandResponse.message_data_size));
   commandResponse.message_data_size = ntohl(messageDataSize);
-  std::cout << "message data size: " << commandResponse.message_data_size << "\n";
-  memcpy(&messageCount, &recvBuf[12], 2);
+  buffIndex += sizeof(commandResponse.message_data_size);
+  
+  memcpy(&messageCount, &recvBuf[buffIndex], sizeof(commandResponse.message_count));
   commandResponse.message_count = ntohs(messageCount);
+  std::cout << "commandCode: " << commandResponse.command_response_code << "\n";
+  std::cout << "result id: " << commandResponse.result_id << "\n";
   std::cout << "message count: " << commandResponse.message_count << "\n";
+  std::cout << "message data size: " << commandResponse.message_data_size << "\n";
 
-  switch (commandCode)
+  switch (commandResponse.message_count)
   {
   case 10:
     std::cout << "AUTH_OK\n";
@@ -240,8 +250,11 @@ int main(int argc, char *argv[])
   getResult.result_id = htons(resultID);
 
   char replyBuf[sizeof(messageHeader) + sizeof(listGet) + strlen(username.c_str()) + sizeof(listGet)];
+  buffIndex = 0; // clear buff index
   memcpy(&replyBuf[0], &messageHeader, sizeof(messageHeader));
-  memcpy(&replyBuf[4], &listGet, sizeof(listGet));
+  buffIndex +=  sizeof(messageHeader);
+  memcpy(&replyBuf[buffIndex], &listGet, sizeof(listGet));
+  buffIndex += 
   strcpy(&replyBuf[24], username.c_str());
   int replyIndex = 24 + username.length();
   memcpy(&recvBuf[replyIndex], &getResult, sizeof(getResult));
