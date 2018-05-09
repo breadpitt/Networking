@@ -1,5 +1,5 @@
 
- /**
+/**
  * James Shannon
  * Project 1
  */
@@ -22,15 +22,15 @@
 #include <cerrno>
 #include <openssl/md5.h>
 
+using std::cerr;
 using std::cin;
 using std::cout;
-using std::cerr;
 using std::getline;
+using std::ifstream;
 using std::istringstream;
 using std::string;
 using std::vector;
-using std::ifstream;
-
+/*
 std::string get_username() {
 std::string username;
 std::cout << "Enter username: ";
@@ -44,8 +44,9 @@ std::cout << "Enter password: ";
 std::getline(std::cin, password);
 return password;
 }
-
-int main(int argc, char *argv[]) {
+*/
+int main(int argc, char *argv[])
+{
   // Alias for argv[1] for convenience
   char *ip_string;
   // Alias for argv[2] for convenience
@@ -56,28 +57,20 @@ int main(int argc, char *argv[]) {
   int udp_socket;
   // Variable used to check return codes from various functions
   int ret;
-  // IPv4 structure representing and IP address and port of the destination
-  struct sockaddr_in server_addr;
-  // IPv4 structure representing the IP address and port of responding server
-  //struct sockaddr_in server_addr;
-  struct sockaddr from;
-  // Holds the length of the server ip address
-  socklen_t from_addr_length;
-  from_addr_length = sizeof(struct sockaddr);
-  // Variable used to store a user's name
-  string username = "nate";
+
+  string username;
   // Variable used to store a user's password
-  string password = "test";
+  string password;
   // Variable used to store a user's permissions
   string permissions;
 
   struct addrinfo hints;
   struct addrinfo *results;
 
-  
   // Note: this needs to be 4, because the program name counts as an argument!
-  if (argc < 3) { // change back to 4 after hard code testing
-    std::cerr << "Please specify IP PORT FILE as first three arguments." << std::endl; 
+  if (argc < 3)
+  { // change back to 4 after hard code testing
+    std::cerr << "Please specify IP PORT FILE as first three arguments." << std::endl;
     return 1;
   }
   // Set up variables "aliases"
@@ -85,9 +78,7 @@ int main(int argc, char *argv[]) {
   port_string = argv[2];
   //string fileName(argv[3]);
 
-    /*
-    std::string username;
-    std::string password;
+  /*
     std::cout << "Please enter your username: \n";
     std::cin >> username;
     std::cout << "Please enter your password: \n";
@@ -95,254 +86,199 @@ int main(int argc, char *argv[]) {
     //permissions = "rwd";
     */
 
-   //get_username();
-   //get_password();
-  
-  // Create the UDP socket. AF_INET used for IPv4 addresses. SOCK_DGRAM indicates creation of a UDP socket
+  //get_username();
+  //get_password();
+
+  username = "nate"; // hardcode for now
+  password = "test";
+
+  // Create the UDP socket
   udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
-  if (udp_socket == -1) {
+  if (udp_socket == -1)
+  {
     std::cerr << "Failed to create udp socket!" << std::endl;
     return 1;
   }
 
   memset(&hints, 0, sizeof(struct addrinfo));
+
   hints.ai_addr = NULL;
   hints.ai_canonname = NULL;
   hints.ai_family = AF_INET;
   hints.ai_protocol = 0;
   hints.ai_flags = AI_PASSIVE;
   hints.ai_socktype = SOCK_DGRAM;
-  char hostname[NI_MAXHOST];
 
   ret = getaddrinfo(ip_string, port_string, &hints, &results);
-  if (ret != 0) {
+  if (ret != 0)
+  {
     std::cerr << "Getaddrinfo failed with error " << ret << std::endl;
     perror("getaddrinfo");
     return 1;
   }
 
-  if (results != NULL){
+  if (results != NULL)
+  {
     std::cout << "Trying to connect \n";
     ret = connect(udp_socket, results->ai_addr, results->ai_addrlen);
-      if (ret != 0){
-        freeaddrinfo(results);
-        std::cout << "Failure to connect to " << ip_string << "\n";
-        return 1;
-      }
+    if (ret != 0)
+    {
+      freeaddrinfo(results);
+      std::cout << "Failure to connect to " << ip_string << "\n";
+      return 1;
+    }
   }
   std::cout << "Connection Successful\nSending Data\n";
-  //getnameinfo(results->ai_addr, results->ai_addrlen, hostname, NI_MAXHOST, NULL, 0, 0);
-  //printf("hostname: %s\n", hostname);
   freeaddrinfo(results);
-  /*
-  // inet_pton converts an ip addr str into the required format
-  // Note that because server_addr is a sockaddr_in (again, IPv4) the 'sin_addr'
-  // member of the struct is used for the IP
-  ret = inet_pton(AF_INET, ip_string, (void *)&server_addr.sin_addr);
 
-  // Check whether the specified IP was parsed properly. If not, exit.
-  if (ret == -1) {
-    std::cerr << "Failed to parse IPv4 address!" << std::endl;
-    close(udp_socket);
-    return 1;
-  }
-  
-  // Convert the port string into an unsigned integer.
-  ret = sscanf(port_string, "%u", &port);
-  if (ret != 1) {
-    std::cerr << "Failed to parse port!" << std::endl;
-    close(udp_socket);
-    return 1;
-  }
+  CommandMessage commandMessage; // Create the command message
+  commandMessage.username_len = htons(username.length());
+  commandMessage.command = htons(80); // 80 is LIST
 
-  // Set the address family to AF_INET (IPv4)
-  server_addr.sin_family = AF_INET;
-  // Set the destination port. Use htons (host to network short)
-  // to ensure that the port is in big endian format
-  server_addr.sin_port = htons(port);
-  */
+  MD5((unsigned char *)password.c_str(),
+      strlen(password.c_str()), commandMessage.password_hash);
 
-CommandMessage initList; // Create the command message
-  initList.username_len = strlen(username.c_str());
-  initList.command = 80; // 80 is LIST
-  
-  MD5((unsigned char *)password.c_str(), 
-          strlen(password.c_str()), initList.password_hash); 
-  unsigned char passwordHash[16];
-  memcpy(passwordHash, initList.password_hash, sizeof(initList.password_hash)); 
+  SUCMSHeader messageHeader;
+  messageHeader.sucms_msg_type = htons(50);                       // Command type
+  messageHeader.sucms_msg_length = htons(20 + username.length()); // Command message struct is 20 bytes
 
-  SUCMSHeader initHeader;
-  initHeader.sucms_msg_type = 50; // Command type
-  initHeader.sucms_msg_length = sizeof(initList) + initList.username_len; 
-  //initHeader.sucms_msg_type = htons(initHeader.sucms_msg_type);
-  //initHeader.sucms_msg_length = htons(initHeader.sucms_msg_length);
+  // Create a buffer to send data
+  char sendBuf[sizeof(commandMessage) + sizeof(messageHeader) + strlen(username.c_str())];
 
-  int initHeaderSize = sizeof(initHeader);
-  int initListSize = sizeof(initList);
-  
- 
-  uint16_t username_length = strlen(username.c_str());
-  initHeader.sucms_msg_type = htons(initHeader.sucms_msg_type);
-  initHeader.sucms_msg_length = htons(initHeader.sucms_msg_length);
-  initList.username_len = htons(initList.username_len);
-  initList.command = htons(initList.command);
+  memcpy(&sendBuf[0], &messageHeader, 4);
+  memcpy(&sendBuf[4], &commandMessage, 20);
+  strcpy(&sendBuf[24], username.c_str());
 
-  // Create and populate buffer used to send initial message to server
-  char initBuf[24 + strlen(username.c_str())];
-  //int initBufSize = sizeof(initList) + sizeof(initHeader) + username_length;
-   
-  memcpy(&initBuf[0], &initHeader, initHeaderSize);
-  memcpy(&initBuf[4], &initList, initListSize);
-  strcpy(&initBuf[24], username.c_str());
-  
-  // Note 1: we are sending strlen(data_string) + 1 to include the null terminator
-  // Note 2: we are casting server_addr to a struct sockaddr because sendto uses the size
-  //         and family to determine what type of address it is.
-  // Note 3: the return value of sendto is the number of bytes sent
- ret = send(udp_socket, initBuf, sizeof(initBuf), 0);
-
-  // Check if send worked, clean up and exit if not.
-  if (ret == -1) {
+  // send first message with header | command message | username
+  ret = send(udp_socket, &sendBuf, sizeof(sendBuf), 0);
+  // Check if send worked
+  if (ret == -1)
+  {
     std::cerr << "Failed to send data!" << std::endl;
     close(udp_socket);
     return 1;
   }
+  std::cout << "Sent " << ret << " bytes out.\n";
 
-  std::cout << "Sent " << ret << " bytes out." << std::endl;
+  // Set up to receive server header | command response
+  uint16_t recvBuf[1400];                   // 1400 is about the largest a packet can be so let's make it that
+                                            // memset(&recvBuf, 0, 1400); // Clear buffer
+  ret = recv(udp_socket, recvBuf, 1400, 0); // Receive up to 1400 bytes of data
 
-  
-  uint16_t recv_buf[2048];
-  uint16_t commandResponse, messageLength; // sucms message type and length
+  CommandResponse commandResponse;
+  uint16_t messageType, messageLength;          // sucms message type and length
   uint16_t commandCode, resultID, messageCount; // command response variables
-  uint32_t messageDataSize; // Size of data received by command response
-  //int from_addr_length;
-  //from_addr_length = sizeof(from); 
-  ret = recv(udp_socket, &recv_buf, sizeof(recv_buf) - 1, 0); // Receive up to 2047 bytes of data
+  uint32_t messageDataSize;                     // Size of data received by command response
 
-  if (ret < 4) {
-    std::cerr << "Failed to recvfrom!" << std::endl;
+  if (ret < 4)
+  {
+    std::cerr << "Failed to recv!" << std::endl;
     std::cerr << strerror(errno) << std::endl;
     close(udp_socket);
     return 1;
   }
-  recv_buf[ret] = '\0';
-  
+
   std::cout << "Received " << ret << " bytes." << std::endl;
-  commandResponse = ntohs(recv_buf[0]);
-  std::cout << "messageType: " << commandResponse << "\n";
-  messageLength = ntohs(recv_buf[1]);
-  std::cout << "messageLength: " << messageLength << "\n";
-  commandCode = ntohs(recv_buf[2]);
-  std::cout << "commandCode: " << commandCode << "\n";
-  resultID = ntohs(recv_buf[3]);
-  std::cout << "result id: " << resultID << "\n";
-  messageDataSize = ntohl(recv_buf[4]);
-  std::cout << "message data size: " << messageDataSize << "\n";
-  messageCount = ntohs(recv_buf[5]);
-  std::cout << "message count: " << messageCount << "\n";
-  
-  
-  switch(commandCode){
-      case 10 : std::cout << "AUTH_OK\n";
-        break;
-      case 11 : std::cout << "AUTH_FAILED\n";
-        break;
-      case 12 : std::cout << "ACCESS_DENIED\n";
-        break;
-      case 13 : std::cout << "NO_SUCH_FILE\n";
-        break;
-      case 14 : std::cout << "INVALID_RESULT_ID\n";
-        break;
-      case 15 : std::cout << "INTERNAL_SERVER_ERROR\n";
-        break;
-      case 16 : std::cout <<  "INVALID_CLIENT_MESSAGE\n";
+  memcpy(&messageType, &recvBuf[0], 2);
+  messageHeader.sucms_msg_type = ntohs(messageType);
+  memcpy(&messageLength, &recvBuf[2], 2);
+  messageHeader.sucms_msg_length = ntohs(messageLength);
+  memcpy(&commandCode, &recvBuf[4], 2);
+  commandResponse.command_response_code = ntohs(commandCode);
+  std::cout << "commandCode: " << commandResponse.command_response_code << "\n";
+  memcpy(&resultID, &recvBuf[6], 2);
+  commandResponse.result_id = ntohs(resultID);
+  std::cout << "result id: " << commandResponse.result_id << "\n";
+  memcpy(&messageDataSize, &recvBuf[8], 4);
+  commandResponse.message_data_size = ntohl(messageDataSize);
+  std::cout << "message data size: " << commandResponse.message_data_size << "\n";
+  memcpy(&messageCount, &recvBuf[12], 2);
+  commandResponse.message_count = ntohs(messageCount);
+  std::cout << "message count: " << commandResponse.message_count << "\n";
+
+  switch (commandCode)
+  {
+  case 10:
+    std::cout << "AUTH_OK\n";
+    break;
+  case 11:
+    std::cout << "AUTH_FAILED\n";
+    break;
+  case 12:
+    std::cout << "ACCESS_DENIED\n";
+    break;
+  case 13:
+    std::cout << "NO_SUCH_FILE\n";
+    break;
+  case 14:
+    std::cout << "INVALID_RESULT_ID\n";
+    break;
+  case 15:
+    std::cout << "INTERNAL_SERVER_ERROR\n";
+    break;
+  case 16:
+    std::cout << "INVALID_CLIENT_MESSAGE\n";
   }
 
-
-  SUCMSHeader clientResponseHeader;
-    clientResponseHeader.sucms_msg_type = htons(50);
-    clientResponseHeader.sucms_msg_length = htons(30 + username_length); // fill in later
+  // Set up to reply header | command message | username | getresult
 
   CommandMessage listGet;
-    listGet.username_len = htons(username_length);
-    listGet.command = htons(80); // 80 is list
-    listGet.password_hash;
+  listGet.username_len = htons(username.length()); // unnecessary but helps me keep track
+  listGet.command = htons(80);                     // 80 is list
+  listGet.password_hash;
 
   SUCMSClientGetResult getResult;
-    getResult.command_type = htons(80);
-    getResult.result_id = htons(resultID);
+  getResult.command_type = htons(80);
+  getResult.result_id = htons(resultID);
 
+  char replyBuf[sizeof(messageHeader) + sizeof(listGet) + strlen(username.c_str()) + sizeof(listGet)];
+  memcpy(&replyBuf[0], &messageHeader, sizeof(messageHeader));
+  memcpy(&replyBuf[4], &listGet, sizeof(listGet));
+  strcpy(&replyBuf[24], username.c_str());
+  int replyIndex = 24 + username.length();
+  memcpy(&recvBuf[replyIndex], &getResult, sizeof(getResult));
 
-  // Create and populate buffer used to send initial message to server
-  char getListBuf[30 + username_length];
-   
-  memcpy(&getListBuf[0], &clientResponseHeader, sizeof(clientResponseHeader));
-  memcpy(&getListBuf[4], &listGet, sizeof(listGet));
-  strcpy(&getListBuf[24], username.c_str());
-  int sizebuf = 24 + username_length;
-  memcpy(&getListBuf[sizebuf], &getResult, sizeof(getResult));
-  // Note 1: we are sending strlen(data_string) + 1 to include the null terminator
-  // Note 2: we are casting server_addr to a struct sockaddr because sendto uses the size
-  //         and family to determine what type of address it is.
-  // Note 3: the return value of sendto is the number of bytes sent
- ret = send(udp_socket, getListBuf, sizeof(getListBuf), 0);
+  ret = send(udp_socket, recvBuf, sizeof(recvBuf), 0);
 
   // Check if send worked, clean up and exit if not.
-  if (ret == -1) {
+  if (ret == -1)
+  {
     std::cerr << "Failed to send data!" << std::endl;
     close(udp_socket);
     return 1;
   }
 
-  std::cout << "Sent " << ret << " bytes out." << std::endl;
+  // Set up to receive server header | FileListResult | list[fileInfo | filename]
+  memset(&recvBuf, 0, 1400); // Clear buffer
 
-uint16_t recvResultsBuf[1400]; 
-uint16_t messageType, filenameLen;//, messageLength commandResponse, messageCount, messageNumber, filenameLen, totalPieces;
-uint32_t fileSizeBytes; //messageDataSize, ;
-ret = recv(udp_socket, &recvResultsBuf, sizeof(recvResultsBuf) - 1, 0); // Receive up to 1399 bytes of data
+  for (int i = 0; i < commandResponse.message_count; i++)
+  {
+    ret = recv(udp_socket, recvBuf, 1400, 0);
+    std::cout << "Message recv" << ret << "\n";
+    memcpy(&messageType, &recvBuf[0], 2);
+    messageHeader.sucms_msg_type = ntohs(messageType);
 
-if (ret < 4) {
-  std::cerr << "Failed to recvfrom!" << std::endl;
-  std::cerr << strerror(errno) << std::endl;
-  close(udp_socket);
-  return 1;
-}
-recvResultsBuf[ret] = '\0';
+    int file_length;
+    int filename_length;
+    int message_number_check;
+    int offset = 8;
+    while (offset < ret)
+    {
 
-std::cout << "Received " << ret << " bytes." << std::endl;
-memcpy(&messageType, &recvResultsBuf[0], 2);
-messageType = ntohs(messageType);
-std::cout << "header code: " << commandResponse << "\n";
-memcpy(&messageLength, &recvResultsBuf[2], 2);
-messageLength = ntohs(messageLength);
-
-
-std::cout << "messageLength: " << messageLength << "\n";
-
-memcpy(&commandResponse, &recvResultsBuf[4], 2);
-commandResponse = ntohs(commandResponse);
-
-memcpy(&resultID, &recvResultsBuf[6], 2);
-resultID = ntohs(resultID);
-std::cout << "result id: " << resultID << "\n";
- memcpy(&messageDataSize, &recvResultsBuf[8], 4);
- messageDataSize = ntohs(messageDataSize);
- std::cout << "message count : " << messageDataSize << "\n";
- memcpy(&messageCount, &recvResultsBuf[12], 2);
-messageCount = ntohs(messageCount);
-std::cout << "messageCount : " << messageCount << "\n";
-//filenameLen = ntohs(recvResultsBuf[4]);
-
-//totalPieces = ntohs(recvResultsBuf[5]);
-//fileSizeBytes = ntohl(recvResultsBuf[6]);
-
-char filename[filenameLen];
-memcpy(&filename[0], &recvResultsBuf, filenameLen);
-std::cout << filename << std::endl;
-
-
-
+      memcpy(&message_number_check, &recvBuf[6], 2);
+      message_number_check = ntohs(message_number_check);
+      memcpy(&filename_length, &recvBuf[offset], 2);
+      filename_length = ntohs(filename_length);
+      char filename[filename_length + 1];
+      filename[filename_length] = '\0';
+      memcpy(&file_length, &recvBuf[offset + 4], 4);
+      file_length = ntohl(file_length);
+      memcpy(&filename, &recvBuf[offset + 8], filename_length);
+      offset = offset + 8 + filename_length;
+      std::cout << "File list entry: " << filename << " of size " << file_length << " bytes\n";
+    }
+  }
 
   close(udp_socket);
   return 0;
