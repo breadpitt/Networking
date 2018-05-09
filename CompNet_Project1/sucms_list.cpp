@@ -133,15 +133,22 @@ int main(int argc, char *argv[])
   freeaddrinfo(results);
 
   CommandMessage commandMessage; // Create the command message
-  commandMessage.username_len = htons(username.length());
-  commandMessage.command = htons(80); // 80 is LIST
+  commandMessage.username_len = strlen(username.c_str());
+  commandMessage.command = 80; // 80 is LIST
+
+  commandMessage.username_len = htons(commandMessage.username_len);
+  commandMessage.command = htons(commandMessage.command);
 
   MD5((unsigned char *)password.c_str(),
       strlen(password.c_str()), commandMessage.password_hash);
 
   SUCMSHeader messageHeader;
-  messageHeader.sucms_msg_type = htons(50);                       // Command type
-  messageHeader.sucms_msg_length = htons(20 + username.length()); // Command message struct is 20 bytes
+  messageHeader.sucms_msg_type = 50; // Command type
+  messageHeader.sucms_msg_length = 20 + strlen(username.c_str()); //sizeof(commandMessage) + strlen(username.c_str());
+
+  messageHeader.sucms_msg_type = htons(messageHeader.sucms_msg_type);
+  messageHeader.sucms_msg_length = htons(messageHeader.sucms_msg_length);
+
 
   // Create a buffer to send data
   char sendBuf[sizeof(commandMessage) + sizeof(messageHeader) + strlen(username.c_str())];
@@ -151,7 +158,7 @@ int main(int argc, char *argv[])
   strcpy(&sendBuf[24], username.c_str());
 
   // send first message with header | command message | username
-  ret = send(udp_socket, &sendBuf, sizeof(sendBuf), 0);
+  ret = send(udp_socket, sendBuf, sizeof(sendBuf), 0);
   // Check if send worked
   if (ret == -1)
   {
@@ -164,13 +171,13 @@ int main(int argc, char *argv[])
   // Set up to receive server header | command response
   uint16_t recvBuf[1400];                   // 1400 is about the largest a packet can be so let's make it that
                                             // memset(&recvBuf, 0, 1400); // Clear buffer
-  ret = recv(udp_socket, recvBuf, 1400, 0); // Receive up to 1400 bytes of data
-
+  ret = recv(udp_socket, &recvBuf, sizeof(recvBuf), 0); // Receive up to 1400 uint16s of data
+  
   CommandResponse commandResponse;
   uint16_t messageType, messageLength;          // sucms message type and length
   uint16_t commandCode, resultID, messageCount; // command response variables
   uint32_t messageDataSize;                     // Size of data received by command response
-
+  
   if (ret < 4)
   {
     std::cerr << "Failed to recv!" << std::endl;
