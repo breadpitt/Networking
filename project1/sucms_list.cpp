@@ -58,41 +58,24 @@ int main(int argc, char *argv[])
   // Variable used to check return codes from various functions
   int ret;
 
-  //string username;
-  // Variable used to store a user's password
-  //string password;
-  // Variable used to store a user's permissions
-  string permissions;
-
   struct addrinfo hints;
   struct addrinfo *results;
 
   // Note: this needs to be 4, because the program name counts as an argument!
   if (argc < 3)
   { // change back to 4 after hard code testing
-    std::cerr << "Please specify IP PORT FILE as first three arguments." << std::endl;
+    std::cerr << "Please specify IP PORT as first two arguments." << std::endl;
     return 1;
   }
   // Set up variables "aliases"
   ip_string = argv[1];
   port_string = argv[2];
-  //string fileName(argv[3]);
-
-  /*
-    std::cout << "Please enter your username: \n";
-    std::cin >> username;
-    std::cout << "Please enter your password: \n";
-    std::cin >> password;
-    //permissions = "rwd";
-    */
-
+ 
   string username = get_username();
   string password = get_password();
 
-  //username = "nate"; // hardcode for now
   int username_len = strlen(username.c_str());
-  //password = "test";
-
+ 
   // Create the UDP socket
   udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -145,7 +128,7 @@ int main(int argc, char *argv[])
       strlen(password.c_str()), commandMessage.password_hash);
 
   SUCMSHeader messageHeader;
-  messageHeader.sucms_msg_type = 50;                                                  // Command type
+  messageHeader.sucms_msg_type = 50;  // Command type
   messageHeader.sucms_msg_length = sizeof(commandMessage) + username_len; // 20 + usrn len
 
   messageHeader.sucms_msg_type = htons(messageHeader.sucms_msg_type);
@@ -214,12 +197,6 @@ int main(int argc, char *argv[])
   memcpy(&messageCount, &recvBuf[buffIndex], sizeof(commandResponse.message_count));
   commandResponse.message_count = ntohs(messageCount);
 
-  /*
-  std::cout << "commandCode: " << commandResponse.command_response_code << "\n";
-  std::cout << "result id: " << commandResponse.result_id << "\n";
-  std::cout << "message count: " << commandResponse.message_count << "\n";
-  std::cout << "message data size: " << commandResponse.message_data_size << "\n";
-*/
   switch (commandResponse.command_response_code)
   {
   case 10:
@@ -231,14 +208,13 @@ int main(int argc, char *argv[])
   }
 
   // Set up to reply header | command message | username | getresult
-  // Can reuse the same header -> command needs to change one value
-  // Set the message id value!
-
+  // in hindsight declaring a new header and command message would've saved a lot of headache
+  
   SUCMSClientGetResult getResult; // use LIST command?
   getResult.command_type = 80;
   getResult.command_type = htons(getResult.command_type);
   getResult.result_id = resultID; 
-  //getResult.message_number = 0;
+  
 
   CommandMessage secondCommand;
 
@@ -262,20 +238,9 @@ int main(int argc, char *argv[])
   
   strcpy(&replyBuf[buffIndex], username.c_str());
   buffIndex += username_len;
-  /* different message config
-  strcpy(&replyBuf[buffIndex], username.c_str());
-  buffIndex += username_len;
-  memcpy(&replyBuf[buffIndex], &getResult, sizeof(getResult));
-  */
+
  memcpy(&replyBuf[buffIndex], &getResult, sizeof(getResult));
   
-  std::cout << "Message type: " << ntohs(messageHeader.sucms_msg_type) << "\n";
-    std::cout << "Message Len: " << ntohs(messageHeader.sucms_msg_length) << "\n";
-    std::cout << "getresult command type " << ntohs(getResult.command_type) << std::endl;
-  std::cout << "result_id " << ntohs(getResult.result_id) << std::endl;
-  std::cout << "username len " << ntohs(commandMessage.username_len) << std::endl;
-  std::cout << "command " << ntohs(commandMessage.command) << std::endl;
-
   // SEND SECOND second command
   ret = send(udp_socket, &replyBuf, sizeof(replyBuf), 0);
 
@@ -286,7 +251,7 @@ int main(int argc, char *argv[])
     close(udp_socket);
     return 1;
   }
-  std::cout << "SENT  " << ret << " bytes." << std::endl;
+  
 
   // Set up to receive server header | FileListResult | list[fileInfo | filename]
   memset(&recvBuf, 0, 1400); // Clear buffer
@@ -302,8 +267,7 @@ int main(int argc, char *argv[])
     buffIndex = 0;
     // RECV FINAL message(s)
     ret = recv(udp_socket, recvBuf, 1400, 0);
-    std::cout << "Message recv" << ret << "\n";
-
+    
     // Parse the message header
     memcpy(&messageType, &recvBuf[0], sizeof(messageHeader.sucms_msg_type));
     messageType = ntohs(messageType);
@@ -311,7 +275,7 @@ int main(int argc, char *argv[])
     memcpy(&messageLength, &recvBuf[buffIndex], sizeof(messageHeader.sucms_msg_length));
     buffIndex += sizeof(messageHeader.sucms_msg_length); // 4
     messageLength = ntohs(messageLength);
-    std::cout << "Message type: " << messageType << "\n";
+    
     if (messageType == 52){
     // Parse the list file result
     memcpy(&resultID, &recvBuf[buffIndex], sizeof(fileListResult.result_id));
@@ -321,10 +285,6 @@ int main(int argc, char *argv[])
     message_number = ntohs(message_number);
     buffIndex += sizeof(fileListResult.message_number); //8
 
-    std::cout << "Message type: " << messageType << "\n";
-    std::cout << "Message Len: " << messageHeader.sucms_msg_length << "\n";
-    std::cout << "List file result id: " << fileListResult.result_id << "\n";
-    std::cout << "List file message number: " << fileListResult.message_number << "\n";
     // Parse the file info
     int fileIndex;
     while (buffIndex < ret)
@@ -332,16 +292,16 @@ int main(int argc, char *argv[])
       fileIndex = buffIndex;
       memcpy(&filename_len, &recvBuf[buffIndex], sizeof(fileInfo.filename_len));
       fileInfo.filename_len = ntohs(filename_len);
-      std::cout << "filename Len: " << filename_len << "\n";
       buffIndex += (sizeof(fileInfo.filename_len) + sizeof(fileInfo.total_pieces)); // jump to where fileInfo file size is stored
       memcpy(&file_size, &recvBuf[buffIndex], sizeof(fileInfo.filesize_bytes)); 
+     
       buffIndex = fileIndex + sizeof(fileInfo); // set the bufIndex to before the fileInfo header then skip past it
       char filename[fileInfo.filename_len + 1];
       filename[fileInfo.filename_len] = '\0';
       memcpy(&filename, &recvBuf[buffIndex], fileInfo.filename_len);
       buffIndex += fileInfo.filename_len;
-      fileInfo.filesize_bytes = ntohs(fileInfo.filesize_bytes);
-      std::cout << "File list entry: " << filename << " of size " << fileInfo.filesize_bytes << " bytes\n";
+      
+      std::cout << "File list entry: " << filename << " of size " << ntohl(file_size) << " bytes.\n";
     }
   } else {
     std::cout << "Wrong response type\n";
