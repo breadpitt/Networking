@@ -30,29 +30,38 @@ using std::ifstream;
 using std::istringstream;
 using std::string;
 using std::vector;
-/*
-std::string get_username() {
-std::string username;
-std::cout << "Enter username: ";
-std::getline(std::cin, username);
-return username;
+
+std::string get_username()
+{
+    std::string username;
+    std::cout << "Enter username: ";
+    std::getline(std::cin, username);
+    return username;
 }
 
-std::string get_password(){
-std::string password;
-std::cout << "Enter password: ";
-std::getline(std::cin, password);
-return password;
+std::string get_password()
+{
+    std::string password;
+    std::cout << "Enter password: ";
+    std::getline(std::cin, password);
+    return password;
 }
-*/
+
+std::string get_filename()
+{
+    std::string filename;
+    std::cout << "Enter filename: ";
+    std::getline(std::cin, filename);
+    return filename;
+}
+
 int main(int argc, char *argv[])
 {
     // Alias for argv[1] for convenience
     char *ip_string;
     // Alias for argv[2] for convenience
     char *port_string;
-    // Alias for argv[3] for convience
-    string filename;
+    //string filename;
     // Port to send UDP data to. Need to convert from command line string to a number
     unsigned int port;
     // The socket used to send UDP data on
@@ -60,17 +69,14 @@ int main(int argc, char *argv[])
     // Variable used to check return codes from various functions
     int ret;
 
-    string username = "nate"; // hardcode for now;
+    //string username = "nate"; // hardcode for now;
     // Variable used to store a user's password
-    string password = "test";
-    // Variable used to store a user's permissions
-    string permissions;
-
+    //string password = "test";
+    //string filename = "test.txt";
     struct addrinfo hints;
     struct addrinfo *results;
 
-    // Note: this needs to be 4, because the program name counts as an argument!
-    if (argc < 4)
+    if (argc < 3)
     {
         std::cerr << "Please specify IP PORT FILE as first three arguments." << std::endl;
         return 1;
@@ -78,7 +84,7 @@ int main(int argc, char *argv[])
     // Set up variables "aliases"
     ip_string = argv[1];
     port_string = argv[2];
-    filename = argv[3];
+    //filename = argv[3];
 
     /*
     std::cout << "Please enter your username: \n";
@@ -88,8 +94,9 @@ int main(int argc, char *argv[])
     //permissions = "rwd";
     */
 
-    //get_username();
-    //get_password();
+    string username = get_username();
+    string password = get_password();
+    string filename = get_filename();
 
     // Create the UDP socket
     udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -130,9 +137,10 @@ int main(int argc, char *argv[])
     }
     std::cout << "Connection Successful\nSending Data\n";
     freeaddrinfo(results);
-
+    int username_len = strlen(username.c_str());
+    int filename_len = strlen(filename.c_str());
     CommandMessage commandMessage; // Create the command message
-    commandMessage.username_len = strlen(username.c_str());
+    commandMessage.username_len = username_len;
     commandMessage.command = 83; // 83 is DELETE
 
     commandMessage.username_len = htons(commandMessage.username_len);
@@ -141,34 +149,38 @@ int main(int argc, char *argv[])
     MD5((unsigned char *)password.c_str(),
         strlen(password.c_str()), commandMessage.password_hash);
 
+    SUCMSClientFileRWRequest deleteRequest;
+    deleteRequest.filename_length = filename_len;
+    deleteRequest.filename_length = htons(deleteRequest.filename_length);
+
+
     SUCMSHeader messageHeader;
     messageHeader.sucms_msg_type = 50; // Command type
-    messageHeader.sucms_msg_length = sizeof(commandMessage) + strlen(username.c_str());
+    messageHeader.sucms_msg_length = sizeof(commandMessage) + sizeof(deleteRequest) +
+                                                 username_len + filename_len;
 
     messageHeader.sucms_msg_type = htons(messageHeader.sucms_msg_type);
     messageHeader.sucms_msg_length = htons(messageHeader.sucms_msg_length);
+    // should be 32 + username and filename bytes long
+    int sendBufSize = sizeof(messageHeader) + sizeof(commandMessage) +
+                      sizeof(deleteRequest) + username_len + filename_len; 
 
-    SUCMSClientFileRWRequest deleteRequest;
-    deleteRequest.filename_length = strlen(filename.c_str());
-    // I'm guessing the server grabs the filename length and skips over these
-    // two but just in case...
-    deleteRequest.result_id = 0;
-    deleteRequest.filename_length = 0;
-    // should be 28 + username and filename bytes long
-    int sendBufSize = sizeof(commandMessage) + sizeof(messageHeader) + strlen(username.c_str()) + sizeof(deleteRequest) + strlen(filename.c_str());
-    // Create a buffer to send data
+    // Create a buffer to send data & 0 out
     char sendBuf[sendBufSize];
-    int bufIndex = 0;
-    memcpy(&sendBuf[0], &messageHeader, 4);
-    bufIndex += 4; // 4
-    memcpy(&sendBuf[bufIndex], &commandMessage, 20);
-    bufIndex += 20; // 24
-    strcpy(&sendBuf[bufIndex], username.c_str());
-    bufIndex += strlen(username.c_str()); // 24 + usrn len
-    memcpy(&sendBuf[bufIndex], &deleteRequest, 8);
-    bufIndex += 8; //24 + usrn len + 8
-    strcpy(&sendBuf[bufIndex], filename.c_str());
-    // send first message with header | command message | username
+    memset(&sendBuf, 0, sizeof(sendBuf));
+
+    int buffIndex = 0;
+    memcpy(&sendBuf[buffIndex], &messageHeader, sizeof(messageHeader));
+    buffIndex += sizeof(messageHeader); // i = 4
+    memcpy(&sendBuf[buffIndex], &commandMessage, sizeof(commandMessage));
+    buffIndex += sizeof(commandMessage); // i = 24
+    strcpy(&sendBuf[buffIndex], username.c_str());
+    buffIndex += username_len; // i = 28 (for "nate" at least)
+    memcpy(&sendBuf[buffIndex], &deleteRequest, sizeof(deleteRequest));
+    buffIndex += sizeof(deleteRequest); //36
+    strcpy(&sendBuf[buffIndex], filename.c_str());
+
+    // SEND FIRST message with header | command message | username
     ret = send(udp_socket, sendBuf, sizeof(sendBuf), 0);
     // Check if send worked
     if (ret == -1)
@@ -179,9 +191,10 @@ int main(int argc, char *argv[])
     }
     std::cout << "Sent " << ret << " bytes out.\n";
 
-    // Set up to receive server header | command response
-    uint16_t recvBuf[1400];                               // 1400 is about the largest a packet can be so let's make it that
-                                                          // memset(&recvBuf, 0, 1400); // Clear buffer
+    
+    char recvBuf[1400];
+
+    // RECV FIRST response header | command response
     ret = recv(udp_socket, &recvBuf, sizeof(recvBuf), 0); // Receive up to 1400 uint16s of data
 
     CommandResponse commandResponse;
@@ -197,25 +210,23 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    std::cout << "Received " << ret << " bytes." << std::endl;
-    memcpy(&messageType, &recvBuf[0], 2);
+    buffIndex = 0;
+    memcpy(&messageType, &recvBuf[0], sizeof(messageHeader.sucms_msg_type));
     messageHeader.sucms_msg_type = ntohs(messageType);
-    memcpy(&messageLength, &recvBuf[2], 2);
+    buffIndex = sizeof(messageHeader.sucms_msg_type); // 2
+    memcpy(&messageLength, &recvBuf[buffIndex], sizeof(messageHeader.sucms_msg_length));
+    buffIndex += sizeof(messageHeader.sucms_msg_length); // 6
     messageHeader.sucms_msg_length = ntohs(messageLength);
-    memcpy(&commandCode, &recvBuf[4], 2);
+    memcpy(&commandCode, &recvBuf[buffIndex], sizeof(commandResponse.command_response_code));
     commandResponse.command_response_code = ntohs(commandCode);
-    std::cout << "commandCode: " << commandResponse.command_response_code << "\n";
-    memcpy(&resultID, &recvBuf[6], 2);
-    commandResponse.result_id = ntohs(resultID);
-    std::cout << "result id: " << commandResponse.result_id << "\n";
-    memcpy(&messageDataSize, &recvBuf[8], 4);
-    commandResponse.message_data_size = ntohl(messageDataSize);
-    std::cout << "message data size: " << commandResponse.message_data_size << "\n";
-    memcpy(&messageCount, &recvBuf[12], 2);
-    commandResponse.message_count = ntohs(messageCount);
-    std::cout << "message count: " << commandResponse.message_count << "\n";
+    buffIndex += sizeof(commandResponse.command_response_code); //8
 
-    switch (commandCode)
+    std::cout << "commandCode: " << commandResponse.command_response_code << "\n";
+    //std::cout << "result id: " << commandResponse.result_id << "\n";
+    //std::cout << "message count: " << commandResponse.message_count << "\n";
+    //std::cout << "message data size: " << commandResponse.message_data_size << "\n";
+
+    switch (commandResponse.command_response_code)
     {
     case 10:
         std::cout << "FILE_DELETED\n";
@@ -229,14 +240,12 @@ int main(int argc, char *argv[])
     case 13:
         std::cout << "NO_SUCH_FILE\n";
         break;
-    case 14:
-        std::cout << "INVALID_RESULT_ID\n";
-        break;
     case 15:
         std::cout << "INTERNAL_SERVER_ERROR\n";
         break;
     case 16:
         std::cout << "INVALID_CLIENT_MESSAGE\n";
+        break;
     }
 
     close(udp_socket);

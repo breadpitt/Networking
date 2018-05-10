@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
   memcpy(&sendBuf[sizeof(messageHeader)], &commandMessage, CmndHdrSize);
   strcpy(&sendBuf[CmndHdrSize], username.c_str());
 
-  // send first message with header | command message | username
+  // SEND FIRST message with header | command message | username
   ret = send(udp_socket, sendBuf, sizeof(sendBuf), 0);
   // Check if send worked
   if (ret == -1)
@@ -171,9 +171,11 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  // Set up to receive server header | command response
+  // Set up to receive response
   char recvBuf[1400];                                   // 1400 is about the largest a packet can be so let's make it that
   memset(&recvBuf, 0, 1400);                            // Clear buffer
+
+  // RECV FIRST response as header | command response
   ret = recv(udp_socket, &recvBuf, sizeof(recvBuf), 0); // Receive up to 1400 uint16s of data
 
   if (ret < 4)
