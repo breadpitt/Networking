@@ -91,6 +91,7 @@ int main(int argc, char *argv[])
   //get_password();
 
   username = "nate"; // hardcode for now
+  int username_len = strlen(username.c_str());
   password = "test";
 
   // Create the UDP socket
@@ -108,7 +109,7 @@ int main(int argc, char *argv[])
   hints.ai_canonname = NULL;
   hints.ai_family = AF_INET;
   hints.ai_protocol = 0;
-  hints.ai_flags = AI_PASSIVE;
+  //hints.ai_flags = AI_PASSIVE;
   hints.ai_socktype = SOCK_DGRAM;
 
   ret = getaddrinfo(ip_string, port_string, &hints, &results);
@@ -151,11 +152,14 @@ int main(int argc, char *argv[])
   messageHeader.sucms_msg_length = htons(messageHeader.sucms_msg_length);
 
   int CmndHdrSize = sizeof(messageHeader) + sizeof(commandMessage); // 24
-  // Create a buffer to send data
+  // Create a buffer to send data & 0 out
   char sendBuf[CmndHdrSize + strlen(username.c_str())];
+  memset(&sendBuf, 0, sizeof(sendBuf));
 
-  memcpy(&sendBuf[0], &messageHeader, sizeof(messageHeader));
-  memcpy(&sendBuf[sizeof(messageHeader)], &commandMessage, 20);
+  int buffIndex = 0;
+  memcpy(&sendBuf[buffIndex], &messageHeader, sizeof(messageHeader));
+ // buffIndex += 
+  memcpy(&sendBuf[sizeof(messageHeader)], &commandMessage, CmndHdrSize);
   strcpy(&sendBuf[CmndHdrSize], username.c_str());
 
   // send first message with header | command message | username
@@ -167,17 +171,11 @@ int main(int argc, char *argv[])
     close(udp_socket);
     return 1;
   }
-  std::cout << "Sent " << ret << " bytes out.\n";
-
+  
   // Set up to receive server header | command response
-  uint16_t recvBuf[1400];                   // 1400 is about the largest a packet can be so let's make it that
+  char recvBuf[1400];                   // 1400 is about the largest a packet can be so let's make it that
   memset(&recvBuf, 0, 1400); // Clear buffer
   ret = recv(udp_socket, &recvBuf, sizeof(recvBuf), 0); // Receive up to 1400 uint16s of data
-  
-  CommandResponse commandResponse;
-  uint16_t messageType, messageLength;          // sucms message type and length
-  uint16_t commandCode, resultID, messageCount; // command response variables
-  uint32_t messageDataSize;                     // Size of data received by command response
   
   if (ret < 4)
   {
@@ -187,8 +185,14 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+  CommandResponse commandResponse;
+  uint16_t messageType, messageLength;          // sucms message type and length
+  uint16_t commandCode, resultID, messageCount; // command response variables
+  uint32_t messageDataSize;                     // Size of data received by command response
+  
   std::cout << "Received " << ret << " bytes." << std::endl;
-  int buffIndex = 0;
+  buffIndex = 0;
+  
   memcpy(&messageType, &recvBuf[0], sizeof(messageHeader.sucms_msg_type));
   messageHeader.sucms_msg_type = ntohs(messageType);
   buffIndex = sizeof(messageHeader.sucms_msg_type); // 4
@@ -209,12 +213,15 @@ int main(int argc, char *argv[])
   
   memcpy(&messageCount, &recvBuf[buffIndex], sizeof(commandResponse.message_count));
   commandResponse.message_count = ntohs(messageCount);
+    std::cout << "Message type: " << messageHeader.sucms_msg_type << "\n";
+  std::cout << "Message Len: " << messageHeader.sucms_msg_length << "\n";
+
   std::cout << "commandCode: " << commandResponse.command_response_code << "\n";
   std::cout << "result id: " << commandResponse.result_id << "\n";
   std::cout << "message count: " << commandResponse.message_count << "\n";
   std::cout << "message data size: " << commandResponse.message_data_size << "\n";
 
-  switch (commandResponse.message_count)
+  switch (commandResponse.command_response_code)
   {
   case 10:
     std::cout << "AUTH_OK\n";
@@ -254,10 +261,10 @@ int main(int argc, char *argv[])
   memcpy(&replyBuf[0], &messageHeader, sizeof(messageHeader));
   buffIndex +=  sizeof(messageHeader);
   memcpy(&replyBuf[buffIndex], &listGet, sizeof(listGet));
-  buffIndex += 
-  strcpy(&replyBuf[24], username.c_str());
-  int replyIndex = 24 + username.length();
-  memcpy(&recvBuf[replyIndex], &getResult, sizeof(getResult));
+  buffIndex += sizeof(listGet); // 24
+  strcpy(&replyBuf[buffIndex], username.c_str());
+  buffIndex += username_len;
+  memcpy(&recvBuf[buffIndex], &getResult, sizeof(getResult));
 
   ret = send(udp_socket, recvBuf, sizeof(recvBuf), 0);
 
