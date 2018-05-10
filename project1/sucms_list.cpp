@@ -202,12 +202,16 @@ int main(int argc, char *argv[])
     std::cout << "AUTH_OK\n";
     break;
   case 11:
-    std::cout << "AUTH_FAILED\n";
+    std::cout << "Received AUTH_FAILED from server.\n";
     return 1;
-    break;
-  default: std::cout << "YOU DONKED UP\n";
+  case 15:
+        std::cout << "INTERNAL_SERVER_ERROR\n";
+        return 1;
+  case 16:
+        std::cout << "INVALID_CLIENT_MESSAGE\n";
+        return 1;
+  default: std::cout << "YOU DONKED UP!\n";
     return 1;
-    break;
   }
 
   // Set up to reply header | command message | username | getresult
@@ -296,7 +300,7 @@ int main(int argc, char *argv[])
       memcpy(&filename_len, &recvBuf[buffIndex], sizeof(fileInfo.filename_len));
       fileInfo.filename_len = ntohs(filename_len);
       buffIndex += (sizeof(fileInfo.filename_len) + sizeof(fileInfo.total_pieces)); // jump to where fileInfo file size is stored
-      memcpy(&file_size, &recvBuf[buffIndex], sizeof(fileInfo.filesize_bytes)); 
+      memcpy(&fileInfo.filesize_bytes, &recvBuf[buffIndex], sizeof(fileInfo.filesize_bytes)); 
      
       buffIndex = fileIndex + sizeof(fileInfo); // set the bufIndex to before the fileInfo header then skip past it
       char filename[fileInfo.filename_len + 1];
@@ -304,14 +308,12 @@ int main(int argc, char *argv[])
       memcpy(&filename, &recvBuf[buffIndex], fileInfo.filename_len);
       buffIndex += fileInfo.filename_len;
       
-      std::cout << "File list entry: " << filename << " of size " << ntohl(file_size) << " bytes.\n";
+      std::cout << "File list entry: " << filename << " of size " << ntohl(fileInfo.filesize_bytes) << " bytes.\n";
     }
   } else {
     std::cout << "Wrong response type\n";
   }
   }
-  
-
   close(udp_socket);
   return 0;
 }
