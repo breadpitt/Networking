@@ -156,9 +156,7 @@ int main(int argc, char *argv[])
   char sendBuf[CmndHdrSize + strlen(username.c_str())];
   memset(&sendBuf, 0, sizeof(sendBuf));
 
-  int buffIndex = 0;
-  memcpy(&sendBuf[buffIndex], &messageHeader, sizeof(messageHeader));
- // buffIndex += 
+  memcpy(&sendBuf[0], &messageHeader, sizeof(messageHeader));
   memcpy(&sendBuf[sizeof(messageHeader)], &commandMessage, CmndHdrSize);
   strcpy(&sendBuf[CmndHdrSize], username.c_str());
 
@@ -189,10 +187,8 @@ int main(int argc, char *argv[])
   uint16_t messageType, messageLength;          // sucms message type and length
   uint16_t commandCode, resultID, messageCount; // command response variables
   uint32_t messageDataSize;                     // Size of data received by command response
-  
-  std::cout << "Received " << ret << " bytes." << std::endl;
-  buffIndex = 0;
-  
+
+  int buffIndex = 0;  
   memcpy(&messageType, &recvBuf[0], sizeof(messageHeader.sucms_msg_type));
   messageHeader.sucms_msg_type = ntohs(messageType);
   buffIndex = sizeof(messageHeader.sucms_msg_type); // 4
@@ -204,7 +200,9 @@ int main(int argc, char *argv[])
   buffIndex += sizeof(commandResponse.command_response_code); //12 
   
   memcpy(&resultID, &recvBuf[buffIndex], sizeof(commandResponse.result_id));
-  commandResponse.result_id = ntohs(resultID);
+  commandResponse.result_id = resultID;
+    std::cout << "result_id " << commandResponse.result_id << std::endl;
+
   buffIndex += sizeof(commandResponse.result_id); // 16
   
   memcpy(&messageDataSize, &recvBuf[buffIndex], sizeof(commandResponse.message_data_size));
@@ -213,14 +211,13 @@ int main(int argc, char *argv[])
   
   memcpy(&messageCount, &recvBuf[buffIndex], sizeof(commandResponse.message_count));
   commandResponse.message_count = ntohs(messageCount);
-    std::cout << "Message type: " << messageHeader.sucms_msg_type << "\n";
-  std::cout << "Message Len: " << messageHeader.sucms_msg_length << "\n";
-
+  
+/*
   std::cout << "commandCode: " << commandResponse.command_response_code << "\n";
   std::cout << "result id: " << commandResponse.result_id << "\n";
   std::cout << "message count: " << commandResponse.message_count << "\n";
   std::cout << "message data size: " << commandResponse.message_data_size << "\n";
-
+*/
   switch (commandResponse.command_response_code)
   {
   case 10:
@@ -246,27 +243,30 @@ int main(int argc, char *argv[])
   }
 
   // Set up to reply header | command message | username | getresult
+  // Can reuse the same header -> command needs to change one value
+  // Set the message id value!
 
-  CommandMessage listGet;
-  listGet.username_len = htons(username.length()); // unnecessary but helps me keep track
-  listGet.command = htons(80);                     // 80 is list
-  listGet.password_hash;
+  commandMessage.command = 84; // 84 is CLIENT_GET_RESULT
+  commandMessage.command = htons(commandMessage.command);
 
   SUCMSClientGetResult getResult;
-  getResult.command_type = htons(80);
-  getResult.result_id = htons(resultID);
-
-  char replyBuf[sizeof(messageHeader) + sizeof(listGet) + strlen(username.c_str()) + sizeof(listGet)];
-  buffIndex = 0; // clear buff index
+  getResult.command_type = htons(84);
+  getResult.result_id = resultID; // no need to convert back and forth
+  getResult.message_number = 0;
+  std::cout << "result_id " << getResult.result_id << std::endl;
+  char replyBuf[sizeof(messageHeader) + sizeof(commandMessage) + strlen(username.c_str()) + sizeof(getResult)];
+  buffIndex = 0;
   memcpy(&replyBuf[0], &messageHeader, sizeof(messageHeader));
   buffIndex +=  sizeof(messageHeader);
-  memcpy(&replyBuf[buffIndex], &listGet, sizeof(listGet));
-  buffIndex += sizeof(listGet); // 24
+  memcpy(&replyBuf[buffIndex], &commandMessage, sizeof(commandMessage));
+  buffIndex += sizeof(commandMessage); // 24
   strcpy(&replyBuf[buffIndex], username.c_str());
   buffIndex += username_len;
-  memcpy(&recvBuf[buffIndex], &getResult, sizeof(getResult));
+    
 
-  ret = send(udp_socket, recvBuf, sizeof(recvBuf), 0);
+  memcpy(&replyBuf[buffIndex], &getResult, sizeof(getResult));
+
+  ret = send(udp_socket, replyBuf, sizeof(replyBuf), 0);
 
   // Check if send worked, clean up and exit if not.
   if (ret == -1)
@@ -275,37 +275,58 @@ int main(int argc, char *argv[])
     close(udp_socket);
     return 1;
   }
+  std::cout << "SENT  " << ret << " bytes." << std::endl;
 
   // Set up to receive server header | FileListResult | list[fileInfo | filename]
   memset(&recvBuf, 0, 1400); // Clear buffer
+    SUCMSHeader rmessageHeader;
+    uint16_t rmessageType, rmessageLength;
+    SUCMSFileListResult fileListResult;
+    uint16_t message_number;
+    
+    SUCMSFileInfo fileInfo;
+    uint16_t filename_len;
+    uint32_t file_size;
 
-  for (int i = 0; i < commandResponse.message_count; i++)
-  {
+        buffIndex = 0;  
+
     ret = recv(udp_socket, recvBuf, 1400, 0);
     std::cout << "Message recv" << ret << "\n";
-    memcpy(&messageType, &recvBuf[0], 2);
-    messageHeader.sucms_msg_type = ntohs(messageType);
+    
 
-    int file_length;
-    int filename_length;
-    int message_number_check;
-    int offset = 8;
-    while (offset < ret)
-    {
+    // Parse the message header
+    memcpy(&rmessageType, &recvBuf[0], sizeof(rmessageHeader.sucms_msg_type));
+    rmessageHeader.sucms_msg_type = ntohs(rmessageType);
+    buffIndex = sizeof(rmessageHeader.sucms_msg_type); // 4
+    memcpy(&rmessageLength, &recvBuf[buffIndex], sizeof(rmessageHeader.sucms_msg_length));
+    buffIndex += sizeof(messageHeader.sucms_msg_length); // 8
+    rmessageHeader.sucms_msg_length = ntohs(rmessageLength);
+    // Parse the list file result 
+    memcpy(&resultID, &recvBuf[buffIndex], sizeof(fileListResult.result_id));
+    fileListResult.result_id = ntohs(resultID);
+    buffIndex += sizeof(fileListResult.result_id);
+    memcpy(&message_number, &recvBuf[buffIndex], sizeof(fileListResult.message_number));
+    fileListResult.message_number = ntohs(message_number);
+    buffIndex += sizeof(fileListResult.message_number);
 
-      memcpy(&message_number_check, &recvBuf[6], 2);
-      message_number_check = ntohs(message_number_check);
-      memcpy(&filename_length, &recvBuf[offset], 2);
-      filename_length = ntohs(filename_length);
-      char filename[filename_length + 1];
-      filename[filename_length] = '\0';
-      memcpy(&file_length, &recvBuf[offset + 4], 4);
-      file_length = ntohl(file_length);
-      memcpy(&filename, &recvBuf[offset + 8], filename_length);
-      offset = offset + 8 + filename_length;
-      std::cout << "File list entry: " << filename << " of size " << file_length << " bytes\n";
-    }
-  }
+    std::cout << "rMessage type: " << rmessageHeader.sucms_msg_type << "\n";
+    std::cout << "rMessage Len: " << rmessageHeader.sucms_msg_length << "\n";
+        std::cout << "List file result id: " << fileListResult.result_id << "\n";
+            std::cout << "List file message number: " << fileListResult.message_number << "\n";
+        // Parse the file info
+    memcpy(&filename_len, &recvBuf[buffIndex], sizeof(fileInfo.filename_len));
+    fileInfo.filename_len = ntohs(filename_len);
+    buffIndex += (sizeof(fileInfo.filename_len) + sizeof(fileInfo.total_pieces)); // Force index to avoid copying varuable not used in list
+    memcpy(&file_size, &recvBuf[buffIndex], sizeof(fileInfo.filesize_bytes));
+    buffIndex += sizeof(fileInfo.filesize_bytes);
+
+    char filename[fileInfo.filename_len + 1];
+    filename[fileInfo.filename_len] = '\0';
+    memcpy(&filename, &recvBuf[buffIndex], fileInfo.filename_len);
+    buffIndex += fileInfo.filename_len;
+    
+      std::cout << "File list entry: " << filename << " of size " << fileInfo.filesize_bytes << " bytes\n";
+
 
   close(udp_socket);
   return 0;
