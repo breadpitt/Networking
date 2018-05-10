@@ -184,7 +184,7 @@ int main(int argc, char *argv[])
     close(udp_socket);
     return 1;
   }
-
+    SUCMSHeader responseHeader;
     CommandResponse commandResponse;
     
     if (ret < 4)
@@ -198,9 +198,9 @@ int main(int argc, char *argv[])
     buffIndex = 0;
     buffIndex = sizeof(responseHeader.sucms_msg_type); // 2
     buffIndex += sizeof(responseHeader.sucms_msg_length); // 4
-    memcpy(&commandCode, &recvBuf[buffIndex], sizeof(commandResponse.command_response_code));
-    commandResponse.command_response_code = ntohs(commandCode);
-    buffIndex += sizeof(commandResponse.command_response_code); //8
+    memcpy(&commandResponse, &recvBuf[buffIndex], sizeof(commandResponse.command_response_code));
+    commandResponse.command_response_code = ntohs(commandResponse.command_response_code);
+   
 
 
     switch (commandResponse.command_response_code)
