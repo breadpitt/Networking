@@ -237,7 +237,7 @@ int main(int argc, char *argv[])
   SUCMSClientGetResult getResult; // use LIST command?
   getResult.command_type = 80;
   getResult.command_type = htons(getResult.command_type);
-  getResult.result_id = htons(resultID); 
+  getResult.result_id = resultID; 
   //getResult.message_number = 0;
 
   CommandMessage secondCommand;
@@ -248,18 +248,34 @@ int main(int argc, char *argv[])
   commandMessage.username_len = htons(commandMessage.username_len);
   commandMessage.command = htons(commandMessage.command);
 
+  messageHeader.sucms_msg_type = htons(50);
   messageHeader.sucms_msg_length = htons(sizeof(commandMessage) + username_len + sizeof(getResult));
-  std::cout << "result_id " << getResult.result_id << std::endl;
+  
   int replyBufSize = sizeof(messageHeader) + sizeof(commandMessage) + username_len + sizeof(getResult);
   char replyBuf[replyBufSize];
   buffIndex = 0;
   memcpy(&replyBuf[0], &messageHeader, sizeof(messageHeader));
   buffIndex += sizeof(messageHeader);
+  
   memcpy(&replyBuf[buffIndex], &commandMessage, sizeof(commandMessage));
   buffIndex += sizeof(commandMessage); // 24
+  
+  strcpy(&replyBuf[buffIndex], username.c_str());
+  buffIndex += username_len;
+  /* different message config
   strcpy(&replyBuf[buffIndex], username.c_str());
   buffIndex += username_len;
   memcpy(&replyBuf[buffIndex], &getResult, sizeof(getResult));
+  */
+ memcpy(&replyBuf[buffIndex], &getResult, sizeof(getResult));
+  
+  std::cout << "Message type: " << ntohs(messageHeader.sucms_msg_type) << "\n";
+    std::cout << "Message Len: " << ntohs(messageHeader.sucms_msg_length) << "\n";
+    std::cout << "getresult command type " << ntohs(getResult.command_type) << std::endl;
+  std::cout << "result_id " << ntohs(getResult.result_id) << std::endl;
+  std::cout << "username len " << ntohs(commandMessage.username_len) << std::endl;
+  std::cout << "command " << ntohs(commandMessage.command) << std::endl;
+
   // SEND SECOND second command
   ret = send(udp_socket, &replyBuf, sizeof(replyBuf), 0);
 
@@ -280,6 +296,7 @@ int main(int argc, char *argv[])
   SUCMSFileInfo fileInfo;
   uint16_t filename_len;
   uint32_t file_size;
+  
   for (int i = 0; i < commandResponse.message_count; i++)
   {
     buffIndex = 0;
@@ -294,7 +311,8 @@ int main(int argc, char *argv[])
     memcpy(&messageLength, &recvBuf[buffIndex], sizeof(messageHeader.sucms_msg_length));
     buffIndex += sizeof(messageHeader.sucms_msg_length); // 4
     messageLength = ntohs(messageLength);
-
+    std::cout << "Message type: " << messageType << "\n";
+    if (messageType == 52){
     // Parse the list file result
     memcpy(&resultID, &recvBuf[buffIndex], sizeof(fileListResult.result_id));
     resultID = ntohs(resultID);
@@ -309,7 +327,7 @@ int main(int argc, char *argv[])
     std::cout << "List file message number: " << fileListResult.message_number << "\n";
     // Parse the file info
     int fileIndex;
-    while (buffIndex < messageHeader.sucms_msg_length)
+    while (buffIndex < ret)
     {
       fileIndex = buffIndex;
       memcpy(&filename_len, &recvBuf[buffIndex], sizeof(fileInfo.filename_len));
@@ -325,7 +343,11 @@ int main(int argc, char *argv[])
       fileInfo.filesize_bytes = ntohs(fileInfo.filesize_bytes);
       std::cout << "File list entry: " << filename << " of size " << fileInfo.filesize_bytes << " bytes\n";
     }
+  } else {
+    std::cout << "Wrong response type\n";
   }
+  }
+  
 
   close(udp_socket);
   return 0;
