@@ -105,7 +105,6 @@ int main(int argc, char *argv[])
 
   if (results != NULL)
   {
-    std::cout << "Trying to connect \n";
     ret = connect(udp_socket, results->ai_addr, results->ai_addrlen);
     if (ret != 0)
     {
@@ -114,7 +113,7 @@ int main(int argc, char *argv[])
       return 1;
     }
   }
-  std::cout << "Connection Successful\nSending Data\n";
+  
   freeaddrinfo(results);
 
   CommandMessage commandMessage; // Create the command message
@@ -186,7 +185,7 @@ int main(int argc, char *argv[])
 
   memcpy(&resultID, &recvBuf[buffIndex], sizeof(commandResponse.result_id));
   commandResponse.result_id = ntohs(resultID);
-  std::cout << "result_id " << commandResponse.result_id << std::endl;
+  
 
   buffIndex += sizeof(commandResponse.result_id); // 16
 
@@ -204,6 +203,10 @@ int main(int argc, char *argv[])
     break;
   case 11:
     std::cout << "AUTH_FAILED\n";
+    return 1;
+    break;
+  default: std::cout << "YOU DONKED UP\n";
+    return 1;
     break;
   }
 
