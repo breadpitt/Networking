@@ -153,8 +153,8 @@ int main(int argc, char *argv[])
   }
 
   // Set up to receive response
-  char recvBuf[1400];                                   // 1400 is about the largest a packet can be so let's make it that
-  memset(&recvBuf, 0, 1400);                            // Clear buffer
+  char recvBuf[2800];                                   // 1400 is about the largest a packet can be so let's make it that
+  memset(&recvBuf, 0, 2800);                            // Clear buffer
 
   // RECV FIRST response as header | command response
   ret = recv(udp_socket, &recvBuf, sizeof(recvBuf), 0); // Receive up to 1400 uint16s of data
@@ -261,7 +261,7 @@ int main(int argc, char *argv[])
   
 
   // Set up to receive server header | FileListResult | list[fileInfo | filename]
-  memset(&recvBuf, 0, 1400); // Clear buffer
+  memset(&recvBuf, 0, 2800); // Clear buffer
   SUCMSFileListResult fileListResult;
   uint16_t message_number;
 
@@ -273,8 +273,9 @@ int main(int argc, char *argv[])
   {
     buffIndex = 0;
     // RECV FINAL message(s)
-    ret = recv(udp_socket, recvBuf, 1400, 0);
-    
+    memset(&recvBuf, 0, 1400); // Clear buffer
+    ret = recv(udp_socket, recvBuf, 2800, 0);
+    std::cout << "RECVD: " << ret << "BYTES\n";
     // Parse the message header
     memcpy(&messageType, &recvBuf[0], sizeof(messageHeader.sucms_msg_type));
     messageType = ntohs(messageType);
@@ -294,7 +295,7 @@ int main(int argc, char *argv[])
 
     // Parse the file info
     int fileIndex;
-    while (buffIndex < ret)
+    while (buffIndex < ret - ((sizeof(messageHeader) + sizeof(fileListResult))))
     {
       fileIndex = buffIndex;
       memcpy(&filename_len, &recvBuf[buffIndex], sizeof(fileInfo.filename_len));
@@ -309,8 +310,9 @@ int main(int argc, char *argv[])
       buffIndex += fileInfo.filename_len;
       
       std::cout << "File list entry: " << filename << " of size " << ntohl(fileInfo.filesize_bytes) << " bytes.\n";
-    }
-  } else {
+   }
+   }
+   else {
     std::cout << "Wrong response type\n";
   }
   }

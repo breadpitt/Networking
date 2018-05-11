@@ -19,14 +19,14 @@ score_possible=0
 make_targets="sucms_list sucms_read sucms_write sucms_delete"
 
 
-echo "Checking result of git pull command"
-git pull
+#echo "Checking result of git pull command"
+#git pull
 
-if [[ $? == 0 ]];then
-  echo "Git pull success!"
-  score=$((score + 1))
-fi
-score_possible=$((score_possible + 1))
+#if [[ $? == 0 ]];then
+ # echo "Git pull success!"
+ # score=$((score + 1))
+#fi
+#score_possible=$((score_possible + 1))
 
 for target in $make_targets;do
   echo "Checking make of each target"
