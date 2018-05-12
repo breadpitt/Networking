@@ -521,8 +521,8 @@ int main(int argc, char *argv[])
   buffIndex += sizeof(commandResponse.message_data_size);
 
   memcpy(&messageCount, &recvBuf[buffIndex], sizeof(commandResponse.message_count));
-  commandResponse.message_count = ntohs(messageCount);
-
+  commandResponse.message_count = messageCount;
+  std::cout << "MESSAGE COUNT: " << commandResponse.message_count << "\n";
   switch (commandResponse.command_response_code)
   {
   case 10:
@@ -617,7 +617,7 @@ int main(int argc, char *argv[])
     resultID = ntohs(resultID);
     buffIndex += sizeof(fileListResult.result_id); // 6
     memcpy(&message_number, &recvBuf[buffIndex], sizeof(fileListResult.message_number));
-    message_number = ntohs(message_number);
+    //message_number = ntohs(message_number);
     buffIndex += sizeof(fileListResult.message_number); //8
 
     // Parse the file info
@@ -640,7 +640,7 @@ int main(int argc, char *argv[])
 
       std::cout << "File list entry: " << filename << " of size " << fileInfo.filesize_bytes << " bytes.\n";
    }
-   
+   //
    
   }
   close(udp_socket);

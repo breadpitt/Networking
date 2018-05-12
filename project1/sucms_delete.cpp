@@ -137,8 +137,8 @@ int main(int argc, char *argv[])
         
         SUCMSClientFileRWRequest deleteFile;
         deleteFile.filename_length = htons(filename_len);
-        deleteFile.result_id = htons(0);
-
+        deleteFile.result_id = 0;
+        std::cout << "RESULTID: " << deleteFile.result_id << "\n";
         int messageSize = sizeof(commandMessage) + sizeof(deleteFile) + 
                                                 username_len + filename_len;
         SUCMSHeader messageHeader;
@@ -198,7 +198,7 @@ int main(int argc, char *argv[])
     buffIndex = 0;
     buffIndex = sizeof(responseHeader.sucms_msg_type); // 2
     buffIndex += sizeof(responseHeader.sucms_msg_length); // 4
-    memcpy(&commandResponse, &recvBuf[buffIndex], sizeof(commandResponse.command_response_code));
+    memcpy(&commandResponse.command_response_code, &recvBuf[buffIndex], sizeof(commandResponse.command_response_code));
     commandResponse.command_response_code = ntohs(commandResponse.command_response_code);
    
 
