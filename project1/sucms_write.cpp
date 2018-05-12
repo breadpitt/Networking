@@ -91,15 +91,20 @@ int main(int argc, char *argv[])
     if (!file.is_open())
     {
         std::cerr << "Error opening file\n";
+        return 1;
     }
 
     // Get file size and set position back to the beginning
     file.seekg(0, file.end);
     unsigned long filesize = file.tellg();
     file.seekg(0, file.beg);
-    int totalpieces = (filesize / 1400) + 1; // How many 1400 byte packets are needed to send the file
+    
+    //How many 1400 byte packets are needed to send the file
+    int totalpieces = (filesize / 1400) + 1; 
+    
     std::cout << "filesize: " << filesize << "\n";
     std::cout << "pieces: " << totalpieces << "\n";
+    
     int username_len = strlen(username.c_str());
     int password_len = strlen(password.c_str());
     int filename_len = strlen(filename.c_str());
@@ -210,7 +215,9 @@ int main(int argc, char *argv[])
         close(udp_socket);
         return 1;
     }
-    uint16_t resultID, messageCount; //
+
+    uint16_t resultID, messageCount; 
+
     buffIndex = 0;
     memcpy(&messageHeader.sucms_msg_type, &recvBuf[0], sizeof(messageHeader.sucms_msg_type));
     messageHeader.sucms_msg_type = ntohs(messageHeader.sucms_msg_type);
@@ -261,49 +268,68 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    // Setup structs and initialize variables
+    // I now see why const is used
     SUCMSClientFileData clientFileData;
-    SUCMSHeader sendHeader;
+    SUCMSHeader sendHeader, recvHeader;
     SUCMSFileDataResponse dataResponse;
-    int availableBuf = 1400 - (sizeof(sendHeader) + sizeof(clientFileData) + username_len);
-    int filesizeIndex = filesize;
-    int file_dataIndex = 0;
-    if (filesizeIndex < (availableBuf))
-    {
-        filesize = filesizeIndex;
-    }
-    else
-    {
-        filesizeIndex = filesize - availableBuf;
-        filesize = availableBuf;
-    }
+    int availableBuf = 1400 - (sizeof(sendHeader) + sizeof(clientFileData) + username_len); // should equal 1348 for nate
+    int filesizeIndex = filesize; // Tracks how much data has been sent
+    int fileStreamPos = 0; // Tracks where in the file to read data
+    int pieces = 0; // If there has been a full 
+    uint16_t messageNumber = 0;
+    clientFileData.username_len = htons(username_len); // Static
+    MD5((unsigned char *)password.c_str(),
+        strlen(password.c_str()), clientFileData.password_hash);
+    
+   // memcpy(&clientFileData.password_hash[0], &commandMessage.password_hash, 16); // ??? Static
 
-    clientFileData.username_len = ntohs(username_len);
-    clientFileData.result_id = resultID;
-    clientFileData.filedata_length = ntohs(filesize);
-    clientFileData.message_number = ntohs(0); //?
-    clientFileData.filedata_offset = ntohs(0);
-    memcpy(clientFileData.password_hash, commandMessage.password_hash, 16); // ???
-
-    sendHeader.sucms_msg_type = ntohs(53);
-    int sendMessageSize = sizeof(sendHeader) + sizeof(clientFileData) + username_len + filesize;
-    sendHeader.sucms_msg_length = ntohs(sendMessageSize);
-
-    int result;
-    char writeBuf[1400];
-
+    sendHeader.sucms_msg_type = htons(53); // Static
+    uint16_t sendMessageSize;
+    int result = 0;
+    
+    
     do
-    {
+    {       
+            // If the filesize is larger than the buffer - headers then set the 
+            // amount to be copied equal to the max amount of space in the buffer
+            // and subtract that amount from a copy of the file size
+            if (totalpieces > 1)
+        {
+            filesizeIndex = filesize - availableBuf;
+            filesize = availableBuf;
+        } 
+
+        file.seekg(clientFileData.filedata_offset);
+
+        std::cout << "FILESIZE: " << filesize << "\n";
+        std::cout << "FILESIZE INDEX: " << filesizeIndex << "\n";
+        sendMessageSize = sizeof(clientFileData) + username_len + filesize; // Dynamic
+        std::cout << "SENDMESSAGESIZE: " << sendMessageSize << "\n";
+        sendHeader.sucms_msg_length = htons(sendMessageSize);
+        std::cout << "MESSAGE LENGTH: " << htons(sendHeader.sucms_msg_length) << "\n";
+        clientFileData.result_id = resultID; // Static?
+        clientFileData.filedata_length = htons(filesize); // Dynamic
+        clientFileData.message_number = htons(messageNumber); // Static?
+        clientFileData.filedata_offset = htonl(result); // Dynamic
+
+        char writeBuf[sizeof(sendHeader) + sendMessageSize];
+        std::cout << "BUFF LENGTH: " << sizeof(writeBuf) << "\n";
+        // Standard copy metadata into buffer
         memset(&writeBuf, 0, sizeof(writeBuf));
         buffIndex = 0;
         memcpy(&writeBuf[buffIndex], &sendHeader, sizeof(sendHeader));
-        buffIndex += sizeof(sendHeader);
+        buffIndex += sizeof(sendHeader); // 4
         memcpy(&writeBuf[buffIndex], &clientFileData, sizeof(clientFileData));
-        buffIndex += sizeof(clientFileData);
+        buffIndex += sizeof(clientFileData); //48
+        
         strcpy(&writeBuf[buffIndex], username.c_str());
-        buffIndex += username_len;
-
+        buffIndex += username_len; // 52 w/ nate
+        std::cout << "BUFF INDEX: " << buffIndex << "\n";
         file.read(&writeBuf[buffIndex], filesize);
         result = file.gcount(); // "Returns the number of characters extracted by the last unformatted input operation."
+        std::cout << "Bytes read: " << result << "\n";
+
         if (result <= 0)
         { // no data to read in
             break;
@@ -312,6 +338,7 @@ int main(int argc, char *argv[])
         // SEND i message with header | command message | username | ClientGetResult
         ret = send(udp_socket, writeBuf, sizeof(writeBuf), 0);
 
+        std::cout << "Bytes sent: " << ret << "\n";
         // Check if send worked
         if (ret == -1)
         {
@@ -320,7 +347,8 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        memset(&recvBuf, 0, 1400); // Clear buffer
+        // Clear buffer
+        memset(&recvBuf, 0, 1400); 
         // RECV FIRST response as header | command response
         ret = recv(udp_socket, &recvBuf, sizeof(recvBuf), 0);
 
@@ -333,28 +361,89 @@ int main(int argc, char *argv[])
         }
 
         buffIndex = 0;
-        memcpy(&messageHeader.sucms_msg_type, &recvBuf[0], sizeof(messageHeader.sucms_msg_type)); // be sure to check for bad chunks
-        messageHeader.sucms_msg_type = ntohs(messageHeader.sucms_msg_type);
-        buffIndex = sizeof(messageHeader.sucms_msg_type); // 2
+        memcpy(&recvHeader.sucms_msg_type, &recvBuf[0], sizeof(recvHeader.sucms_msg_type)); // be sure to check for bad chunks
+        recvHeader.sucms_msg_type = ntohs(recvHeader.sucms_msg_type);
+        buffIndex = sizeof(recvHeader.sucms_msg_type); // 2
 
-        memcpy(&messageHeader.sucms_msg_length, &recvBuf[buffIndex], sizeof(messageHeader.sucms_msg_length));
-        buffIndex += sizeof(messageHeader.sucms_msg_length); // 4
-        messageHeader.sucms_msg_length = ntohs(messageHeader.sucms_msg_length);
 
-        memcpy(&dataResponse.filedata_response_type, &recvBuf[0], sizeof(dataResponse.filedata_response_type)); // be sure to check for bad chunks
+        std::cout << "FILE DATA HEADER: " << recvHeader.sucms_msg_type << "\n";
+        if (recvHeader.sucms_msg_type != 54){
+            std::cout << "Message type error\n";
+            return 1;
+        }        
+
+        memcpy(&recvHeader.sucms_msg_length, &recvBuf[buffIndex], sizeof(recvHeader.sucms_msg_length));
+        buffIndex += sizeof(recvHeader.sucms_msg_length); // 4
+        recvHeader.sucms_msg_length = ntohs(recvHeader.sucms_msg_length);
+
+        memcpy(&dataResponse.filedata_response_type, &recvBuf[buffIndex], sizeof(dataResponse.filedata_response_type)); // be sure to check for bad chunks
         dataResponse.filedata_response_type = ntohs(dataResponse.filedata_response_type);
         buffIndex += sizeof(dataResponse.filedata_response_type); // 6
 
-        memcpy(&dataResponse.message_number, &recvBuf[0], sizeof(dataResponse.message_number)); // be sure to check for bad chunks
-        dataResponse.message_number = ntohs(dataResponse.message_number);
+        memcpy(&messageNumber, &recvBuf[buffIndex], sizeof(dataResponse.message_number)); // Dynamic?
+        //dataResponse.message_number = ntohs(dataResponse.message_number);
         buffIndex += sizeof(dataResponse.message_number); // 8
-
-        memcpy(&dataResponse.result_id, &recvBuf[buffIndex], sizeof(dataResponse.result_id));
+        std::cout << "MESSAGE NUMBER " << dataResponse.message_number << "\n";
+        memcpy(&resultID, &recvBuf[buffIndex], sizeof(dataResponse.result_id)); // Dynamic?
         buffIndex += sizeof(dataResponse.result_id); // 10
-        resultID = dataResponse.result_id;
+        //resultID = dataResponse.result_id;
 
-        file_dataIndex += filesize; // update file index
-    } while (filesize == availableBuf);
+        std::cout << "DATA RESPONSE " << dataResponse.filedata_response_type << "\n";
+        switch (dataResponse.filedata_response_type)
+    {
+    case 20:
+        std::cout << "FILEDATA_OK\n";
+        break;
+    case 21:
+        std::cout << "Received FILEDATA_AUTH_FAILED from server.\n";
+        return 1;
+    case 22:
+        std::cout << "Received FILEDATA_INVALID_RESULT_ID from server.\n";
+        return 1;
+    case 23:
+        std::cout << "Received FILEDATA_INVALID_CHUNK from server.\n";
+        return 1;
+    case 24:
+        std::cout << "Received FILEDATA_SERVER_ERROR from server.\n";
+        return 1;
+    case 25:
+        std::cout << "Received INVALID_CLIENT_MESSAGE from server.\n";
+        return 1;
+    default:
+        std::cout << "YOU DONKED UP!\n";
+        return 1;
+    }
+
+    filesize = filesizeIndex;
+    totalpieces--;
+    clientFileData.filedata_offset += result;  // update file stream index
+    } // filesize should never be more than available Buf and if it is less than it the last packet should have already been sent 
+    while (totalpieces > 0); 
+    std::cout << "SDKFLJ:SDF\n";
+    CommandMessage sendComplete; // Create the command message
+    sendComplete.username_len = htons(username_len);
+    sendComplete.command = htons(85); // no send_complete command?
+
+    MD5((unsigned char *)password.c_str(),
+        strlen(password.c_str()), sendComplete.password_hash);
+
+    int sendCompleteSize = sizeof(sendComplete) + username_len;
+
+    SUCMSHeader sendCompleteHeader;
+    sendCompleteHeader.sucms_msg_type = htons(50); // Command type COMMAND
+    sendCompleteHeader.sucms_msg_length = htons(sendCompleteSize);
+
+    // Create a buffer to send data & 0 out
+    char sendCompleteBuf[sizeof(sendCompleteHeader) + sendCompleteSize];
+    memset(&sendBuf, 0, sizeof(sendBuf));
+
+    buffIndex = 0;
+    memcpy(&sendBuf[buffIndex], &sendCompleteHeader, sizeof(sendCompleteHeader));
+    buffIndex += sizeof(sendCompleteHeader);
+    memcpy(&sendBuf[buffIndex], &sendComplete, sizeof(sendComplete));
+    buffIndex += sizeof(sendComplete);
+    strcpy(&sendBuf[buffIndex], username.c_str());
+    buffIndex += username_len;
 
     close(udp_socket);
     return 0;
