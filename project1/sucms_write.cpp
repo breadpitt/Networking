@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
     file.seekg(0, file.beg);
 
     //How many 1400 byte packets are needed to send the file
-    int totalpieces = (filesize / 1400) + 1;
+    int totalpieces = (filesize / 700) + 1;
 
     std::cout << "filesize: " << filesize << "\n";
     std::cout << "pieces: " << totalpieces << "\n";
@@ -241,7 +241,7 @@ int main(int argc, char *argv[])
     memcpy(&commandResponse.message_count, &recvBuf[buffIndex], sizeof(commandResponse.message_count));
     commandResponse.message_count = ntohs(commandResponse.message_count); //14
     messageCount = commandResponse.message_count;                         // store
-
+    std::cout << "messageCount: " << messageCount << "\n";
     switch (commandResponse.command_response_code)
     {
     case 10:
@@ -273,7 +273,7 @@ int main(int argc, char *argv[])
     SUCMSHeader sendHeader;
     SUCMSHeader recvHeader;
     SUCMSFileDataResponse dataResponse;
-    int availableBuf = 1400 - (sizeof(sendHeader) + sizeof(clientFileData) + username_len); // should equal 1348 for nate
+    int availableBuf = 700 - (sizeof(sendHeader) + sizeof(clientFileData) + username_len); // should equal 1348 for nate
     int filesizeIndex = filesize;                                                           // Tracks how much data has been sent
 
     int fileStreamPos = 0; // Tracks where in the file to read data
@@ -286,13 +286,14 @@ int main(int argc, char *argv[])
     // memcpy(&clientFileData.password_hash[0], &commandMessage.password_hash, 16); // ??? Static
 
     sendHeader.sucms_msg_type = htons(53); // Static
-    uint16_t messageNumber = 1;
+    uint16_t messageNumber = 0;
     uint16_t fileDataLen = htons(filesize);
     uint16_t sendMessageSize;
     uint32_t result = 0;
     uint16_t FDRtype;
 
-    while (totalpieces > 0)
+    //while (totalpieces > 0)
+    for (int i = 0; i < totalpieces; i++)
     {
         {
             // If the filesize is larger than the buffer - headers then set the
@@ -316,7 +317,7 @@ int main(int argc, char *argv[])
             std::cout << "RESULTID " << clientFileData.result_id << "\n";
             clientFileData.filedata_length = htons(filesize); // Dynamic
             std::cout << "FILEDATA LENGTH " << ntohs(clientFileData.filedata_length) << "\n";
-            clientFileData.message_number = htons(messageNumber); // Static?
+            clientFileData.message_number = messageNumber; // Static?
             std::cout << "MESSAGE NUMBER (ntohs) " << ntohs(clientFileData.message_number) << "\n";
             clientFileData.filedata_offset = htonl(result);       // Dynamic
 
@@ -391,7 +392,7 @@ int main(int argc, char *argv[])
             memcpy(&messageNumber, &recvBuf[buffIndex], sizeof(dataResponse.message_number)); // Dynamic?
             dataResponse.message_number = ntohs(dataResponse.message_number);
             buffIndex += sizeof(dataResponse.message_number); // 8
-            std::cout << "MESSAGE NUMBER " << dataResponse.message_number << "\n";
+            std::cout << "MESSAGE NUMBER " << ntohs(messageNumber) << "\n";
             memcpy(&resultID, &recvBuf[buffIndex], sizeof(dataResponse.result_id)); // Dynamic?
             buffIndex += sizeof(dataResponse.result_id);                            // 10
                                                                                     //resultID = dataResponse.result_id;
@@ -423,7 +424,7 @@ int main(int argc, char *argv[])
             }
 
             filesize = filesizeIndex;
-            totalpieces--;
+            //totalpieces--;
             clientFileData.filedata_offset += result; // update file stream index
         }                                             // filesize should never be more than available Buf and if it is less than it the last packet should have already been sent
     }
