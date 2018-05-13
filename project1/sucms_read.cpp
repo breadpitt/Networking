@@ -183,20 +183,19 @@ int main(int argc, char *argv[])
         close(udp_socket);
         return 1;
     }
-    SUCMSHeader responseHeader;
+
     CommandResponse commandResponse;
 
-    if (ret < 4)
-    {
-        std::cerr << "Failed to recv!" << std::endl;
-        std::cerr << strerror(errno) << std::endl;
-        close(udp_socket);
-        return 1;
-    }
     uint16_t resultID, messageCount; //
     buffIndex = 0;
     memcpy(&messageHeader.sucms_msg_type, &recvBuf[0], sizeof(messageHeader.sucms_msg_type));
     messageHeader.sucms_msg_type = ntohs(messageHeader.sucms_msg_type);
+    if (messageHeader.sucms_msg_type != 51)
+    {
+        std::cout << "Message type receive error.1\n";
+        return 1;
+    }
+
     buffIndex = sizeof(messageHeader.sucms_msg_type); // 2
 
     memcpy(&messageHeader.sucms_msg_length, &recvBuf[buffIndex], sizeof(messageHeader.sucms_msg_length));
@@ -244,29 +243,35 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    // Set up to receive variables
     SUCMSClientGetResult getRead;
-    getRead.command_type = htons(81); // READ
-    getRead.result_id = resultID;
-    getRead.message_number = htons(0);
-    commandMessage.command = htons(84); // CLIENT GET RESULTS
-    int loopMsgSize = sizeof(commandMessage) + sizeof(getRead) + username_len;
-    messageHeader.sucms_msg_length = htons(loopMsgSize);
-    // Create a buffer to send data & 0 out
-    char loopSendBuf[sizeof(messageHeader) + messageSize];
-
-    // Set up to receive variables (recv buff already initialized)
+    SUCMSHeader responseHeader;
     SUCMSHeader loopHeader;
     SUCMSFileDataResult loopFDR;
     SUCMSFileData fileData;
 
+    getRead.command_type = htons(81); // READ
+    getRead.result_id = resultID;
+    getRead.message_number = htons(0);
+    commandMessage.command = htons(84); // CLIENT GET RESULTS
+
+    int loopMsgSize = sizeof(commandMessage) + sizeof(getRead) + username_len;
+    responseHeader.sucms_msg_type = htons(50);
+    responseHeader.sucms_msg_length = htons(loopMsgSize);
+    // Create a buffer to send data & 0 out
+    char loopSendBuf[sizeof(responseHeader) + messageSize];
+    FILE *test;
+    test = fopen("TEST.txt", "wb");
+    int result;
     for (int i = 0; i < messageCount; i++)
     {
 
         memset(&loopSendBuf, 0, sizeof(loopSendBuf));
 
         buffIndex = 0;
-        memcpy(&loopSendBuf[buffIndex], &messageHeader, sizeof(messageHeader));
-        buffIndex += sizeof(messageHeader);
+        memcpy(&loopSendBuf[buffIndex], &responseHeader, sizeof(responseHeader));
+
+        buffIndex += sizeof(responseHeader);
         memcpy(&loopSendBuf[buffIndex], &commandMessage, sizeof(commandMessage));
         buffIndex += sizeof(commandMessage);
         strcpy(&loopSendBuf[buffIndex], username.c_str());
@@ -294,18 +299,25 @@ int main(int argc, char *argv[])
             close(udp_socket);
             return 1;
         }
-
+        std::cout << "RECV " << ret << "\n";
         buffIndex = 0;
-        memcpy(&messageHeader.sucms_msg_type, &recvBuf[0], sizeof(messageHeader.sucms_msg_type)); // be sure to check for bad chunks
-        messageHeader.sucms_msg_type = ntohs(messageHeader.sucms_msg_type);
-        buffIndex = sizeof(messageHeader.sucms_msg_type); // 2
+        memcpy(&responseHeader.sucms_msg_type, &recvBuf[0], sizeof(responseHeader.sucms_msg_type));
+        responseHeader.sucms_msg_type = ntohs(responseHeader.sucms_msg_type);
+        buffIndex = sizeof(responseHeader.sucms_msg_type); // 2
+        std::cout << "Message type " << responseHeader.sucms_msg_type << "\n";
 
-        memcpy(&messageHeader.sucms_msg_length, &recvBuf[buffIndex], sizeof(messageHeader.sucms_msg_length));
-        buffIndex += sizeof(messageHeader.sucms_msg_length); // 4
-        messageHeader.sucms_msg_length = ntohs(messageHeader.sucms_msg_length);
+       // if (responseHeader.sucms_msg_type != 53)
+        //{
+         //  std::cout << "Message type receive error2.\n";
+          // return 1;
+        //}
+
+        memcpy(&responseHeader.sucms_msg_length, &recvBuf[buffIndex], sizeof(responseHeader.sucms_msg_length));
+        buffIndex += sizeof(responseHeader.sucms_msg_length); // 4
+        responseHeader.sucms_msg_length = ntohs(responseHeader.sucms_msg_length);
 
         memcpy(&loopFDR.result_id, &recvBuf[0], sizeof(loopFDR.result_id));
-        getRead.result_id = loopFDR.result_id;  // Don't know if the result_id changes or not and I don't want to find out
+        getRead.result_id = loopFDR.result_id;
         buffIndex += sizeof(loopFDR.result_id); // 6
 
         memcpy(&loopFDR.message_number, &recvBuf[buffIndex], sizeof(loopFDR.message_number));
@@ -324,6 +336,8 @@ int main(int argc, char *argv[])
         memcpy(&fileData.filedata_length, &recvBuf[0], sizeof(fileData.filedata_length));
         fileData.filedata_length = ntohs(fileData.filedata_length);
         buffIndex += sizeof(fileData.filedata_length); // 16
+
+        result = fwrite(&recvBuf[buffIndex], sizeof(char), sizeof(loopFDR.file_bytes), test);
 
         switch (commandResponse.command_response_code)
         {

@@ -292,7 +292,7 @@ int main(int argc, char *argv[])
     std::cout << "Message type receive error.\n";
     return 1;
   }
- //std::cout << "MSG RESPONSE " << messageHeader.sucms_msg_type << "\n";
+ 
 
     buffIndex = sizeof(messageHeader.sucms_msg_type); // 2
     memcpy(&messageLength, &recvBuf[buffIndex], sizeof(messageHeader.sucms_msg_length));
@@ -314,7 +314,7 @@ int main(int argc, char *argv[])
       fileInfo.filename_len = ntohs(filename_len);
       buffIndex += 4; // hard coding because somethings off :/ (sizeof(fileInfo.filename_len) + sizeof(fileInfo.total_pieces)); // jump to where fileInfo file size is stored
       memcpy(&file_sizeBytes, &recvBuf[buffIndex], sizeof(fileInfo.filesize_bytes));
-      //fileInfo.filesize_bytes = ntohl(fileInfo.filesize_bytes);
+      
       file_sizeBytes = ntohl(file_sizeBytes);
       buffIndex += sizeof(fileInfo.filesize_bytes);
 
@@ -324,7 +324,7 @@ int main(int argc, char *argv[])
       memcpy(&filename, &recvBuf[buffIndex], fileInfo.filename_len);
       buffIndex += fileInfo.filename_len;
 
-      printf("File list entry: %s of size %u\n", filename, file_sizeBytes); // << filename << " of size " << file_sizeBytes << " bytes.\n";
+      printf("File list entry: %s of size %u bytes\n", filename, file_sizeBytes); 
     }
   } while (message_number < (messageCount - 256));
   close(udp_socket);
