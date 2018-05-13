@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
         SUCMSClientFileRWRequest deleteFile;
         deleteFile.filename_length = htons(filename_len);
         deleteFile.result_id = 0;
-        std::cout << "RESULTID: " << deleteFile.result_id << "\n";
+        
         int messageSize = sizeof(commandMessage) + sizeof(deleteFile) + 
                                                 username_len + filename_len;
         SUCMSHeader messageHeader;
@@ -187,15 +187,13 @@ int main(int argc, char *argv[])
     SUCMSHeader responseHeader;
     CommandResponse commandResponse;
     
-    if (ret < 4)
-    {
-        std::cerr << "Failed to recv!" << std::endl;
-        std::cerr << strerror(errno) << std::endl;
-        close(udp_socket);
-        return 1;
-    }
-
     buffIndex = 0;
+    memcpy(&responseHeader.sucms_msg_type, &recvBuf[buffIndex], sizeof(responseHeader.sucms_msg_type));
+    responseHeader.sucms_msg_type = ntohs(responseHeader.sucms_msg_type);
+    if (responseHeader.sucms_msg_type != 52){
+    std::cout << "Message type receive error.\n";
+    return 1;
+  }
     buffIndex = sizeof(responseHeader.sucms_msg_type); // 2
     buffIndex += sizeof(responseHeader.sucms_msg_length); // 4
     memcpy(&commandResponse.command_response_code, &recvBuf[buffIndex], sizeof(commandResponse.command_response_code));

@@ -179,7 +179,12 @@ int main(int argc, char *argv[])
   int buffIndex = 0;
   memcpy(&messageType, &recvBuf[0], sizeof(messageHeader.sucms_msg_type));
   messageHeader.sucms_msg_type = ntohs(messageType);
-  
+
+  if (messageHeader.sucms_msg_type != 51){
+    std::cout << "Message type receive error1.\n";
+    return 1;
+  }
+
   buffIndex = sizeof(messageHeader.sucms_msg_type); // 4
   memcpy(&messageLength, &recvBuf[buffIndex], sizeof(messageHeader.sucms_msg_length));
   buffIndex += sizeof(messageHeader.sucms_msg_length); // 8
@@ -282,7 +287,13 @@ int main(int argc, char *argv[])
 
     // Parse the message header
     memcpy(&messageType, &recvBuf[0], sizeof(messageHeader.sucms_msg_type));
-    messageType = ntohs(messageType);
+    messageHeader.sucms_msg_type = ntohs(messageType);
+    if (messageHeader.sucms_msg_type != 52){
+    std::cout << "Message type receive error.\n";
+    return 1;
+  }
+ //std::cout << "MSG RESPONSE " << messageHeader.sucms_msg_type << "\n";
+
     buffIndex = sizeof(messageHeader.sucms_msg_type); // 2
     memcpy(&messageLength, &recvBuf[buffIndex], sizeof(messageHeader.sucms_msg_length));
     buffIndex += sizeof(messageHeader.sucms_msg_length); // 4
