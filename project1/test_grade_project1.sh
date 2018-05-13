@@ -46,18 +46,18 @@ for target in $make_targets;do
   score_possible=$((score_possible + 1))
 done
 
-for f in $list_input_files;do
-  cat $f | ./sucms_list lincoln.cs.du.edu 8888 2>/dev/null 1>$test_output_file
-  while read line; do
-    ret=`grep -c "$line" $test_output_file`
-    if [[ $ret == 1 ]];then
-      score=$((score + 1))
-    else
-      echo "Missed line $line in output."
-    fi
-    score_possible=$((score_possible + 1))
-  done < $f\_EXPECTED.txt
-done
+#for f in $list_input_files;do
+ # cat $f | ./sucms_list lincoln.cs.du.edu 8888 2>/dev/null 1>$test_output_file
+  #while read line; do
+   # ret=`grep -c "$line" $test_output_file`
+    #if [[ $ret == 1 ]];then
+     # score=$((score + 1))
+    #else
+     # echo "Missed line $line in output."
+    #fi
+    #score_possible=$((score_possible + 1))
+  #done < $f\_EXPECTED.txt
+#done
 
 for f in $read_input_files;do
   outfile=`tail -n 1 $f`
