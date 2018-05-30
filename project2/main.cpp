@@ -9,7 +9,33 @@
 #include <netdb.h>
 
 #include "TCPClient.h"
-#include <P2P.h>
+#include "P2P.h"
+
+/* TODO: 
+- Update makefile
+- Debug getaddrinfo
+- Your program must also connect to other peers using connect (e.g., act as a client)
+- Your peer must be able to send/receive messages from other peers, regardless of how the connection was initiated
+- Your program must use select to enable support for multiple connections DONE
+- Upon request, your node must respond to find peer requests 
+    (node must store known nodes by server IP address and PORT, and send them to other peers upon request)
+- On startup, your peer will connect to a "seed node". 
+    Within 30 seconds of startup after connecting to this node, 
+        your peer must send a peer lookup request to this seed node to find new peers to connect to
+- Your peer must periodically send peer lookup requests to other connected peers to attempt to find new peers to connect to
+- Your peer must forward messages received to other connected peers
+- Your program should initially take four arguments: 
+    SERVER_HOST PORT SEED_HOST SEED_PORT, where SERVER_HOST is the hostname or IP address of your node, 
+        PORT is the listen port for your node, SEED_HOST is the hostname or port of the initial peer you'll connect to
+             and SEED_PORT is the server port of the seed node
+- Upon startup your program needs to ask the user to enter a nickname to be used when sending messages
+- After initial startup, your program needs to monitor stdin (fd 0)
+     as part of its select routine to take in chat messages from the user
+- When messages are received from the user, they will be encapsulated and sent to all connected peers
+- When previously unseen messages are received from other peers, they will be displayed on stdout
+- When a peer disconnects, your client should remove it from its list of connected and known peers
+*/
+
 int main(int argc, char *argv[]) {
     struct sockaddr_storage incoming_client;
     socklen_t incoming_client_len;
@@ -38,7 +64,7 @@ int main(int argc, char *argv[]) {
     int max_fd;
 
     if ((argc != 3)) {
-        std::cerr << "Specify LISTEN_HOST LISTEN_PORT as first two arguments." << std::endl;
+        std::cerr << "Specify LISTEN_HOST LISTEN_PORT as first two arguments (test network is: lincoln.cs.du.edu 17777)." << std::endl;
         return 1;
     }
 
