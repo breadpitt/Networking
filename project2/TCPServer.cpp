@@ -7,84 +7,23 @@
 #include <vector>
 #include <sys/types.h>
 #include <netdb.h>
-#include <openssl/sha.h>
-#include "TCPClient.h"
+
+#include "TCPServer.h"
 #include "P2P.h"
 
-/* TODO: 
-- Update makefile
-- Debug getaddrinfo
-- Your program must also connect to other peers using connect (e.g., act as a client)
-- Your peer must be able to send/receive messages from other peers, regardless of how the connection was initiated
-- Your program must use select to enable support for multiple connections DONE
-- Upon request, your node must respond to find peer requests 
-    (node must store known nodes by server IP address and PORT, and send them to other peers upon request)
-- On startup, your peer will connect to a "seed node". 
-    Within 30 seconds of startup after connecting to this node, 
-        your peer must send a peer lookup request to this seed node to find new peers to connect to
-- Your peer must periodically send peer lookup requests to other connected peers to attempt to find new peers to connect to
-- Your peer must forward messages received to other connected peers
-- Your program should initially take four arguments: 
-    SERVER_HOST PORT SEED_HOST SEED_PORT, where SERVER_HOST is the hostname or IP address of your node, 
-        PORT is the listen port for your node, SEED_HOST is the hostname or port of the initial peer you'll connect to
-             and SEED_PORT is the server port of the seed node
-- Upon startup your program needs to ask the user to enter a nickname to be used when sending messages
-- After initial startup, your program needs to monitor stdin (fd 0)
-     as part of its select routine to take in chat messages from the user
-- When messages are received from the user, they will be encapsulated and sent to all connected peers
-- When previously unseen messages are received from other peers, they will be displayed on stdout
-- When a peer disconnects, your client should remove it from its list of connected and known peers
-*/
+bool TCPListen(int server_socket, int max_connections){ // need to use scope resolution :: ?
+        int ret; 
+        ret = listen(server_socket, 50);
+        if (ret != 0){
+            perror("listen failure");
+            close(server_socket);
+            return false;
+        }
+        return true;
+}
 
-int main(int argc, char *argv[]) {
+bool create_TCPSocket(char* listen_hostname, char*listen_port){
     
-    int client_port = 5555;
-    sockaddr_in dest_addr;
-    socklen_t client_addr_len;
-
-    TCPClient *client;
-
-    struct sockaddr_storage incoming_client;
-    socklen_t incoming_client_len;
-    std::vector<TCPClient *> client_list;
-    TCPClient *temp_client;
-    char recv_buf[DEFAULT_BUFFER_SIZE];
-    char send_buf[DEFAULT_BUFFER_SIZE];
-    char scratch_buf[DEFAULT_BUFFER_SIZE];
-    struct timeval timeout;
-
-    struct addrinfo hints;
-    struct addrinfo *results;
-    struct addrinfo *results_it;
-
-    char *server_hostname = NULL;
-    char *server_port = NULL;
-    char *seed_hostname = NULL;
-    char *seed_port = NULL;
-    char* temp_server_hostname = NULL;
-    int server_socket;
-    int temp_fd;
-
-    int ret;
-    bool stop = false;
-
-    fd_set read_set;
-    fd_set write_set;
-    int max_fd;
-
-    if ((argc != 5)) {
-        std::cerr << "Specify LISTEN_HOST server_port as first two arguments (test network is: lincoln.cs.du.edu 17777)." << std::endl;
-        return 1;
-    }
-
-    server_hostname = argv[1];
-    server_port = argv[2];
-    seed_hostname = argv[3];
-    seed_port = argv[4];
-
-    // Create the TCP socket.
-    // AF_INET is the address family used for IPv4 addresses
-    // SOCK_STREAM indicates creation of a TCP socket
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     // Make sure socket was created successfully, or exit.
     if (server_socket == -1) {
@@ -100,12 +39,13 @@ int main(int argc, char *argv[]) {
     hints.ai_protocol = 0;
     hints.ai_flags = AI_PASSIVE;
     hints.ai_socktype = SOCK_STREAM;
-    ret = getaddrinfo(server_hostname, server_port, &hints, &results);
+    ret = getaddrinfo(listen_hostname, listen_port, &hints, &results);
     if (ret != 0) {
         std::cerr << "Getaddrinfo failed with error " << ret << std::endl;
         perror("getaddrinfo");
-        return 1;
+        return false;
     }
+
     results_it = results;
     ret = -1;
 
@@ -119,54 +59,14 @@ int main(int argc, char *argv[]) {
         results_it = results_it->ai_next;
     }
     // Always free the result of calling getaddrinfo
-    //freeaddrinfo(results);
+    freeaddrinfo(results);
 
     if (ret != 0) {
         std::cerr << "Failed to bind to any addresses. Be sure to specify a local address/hostname, and an unused port?"
                   << std::endl;
-        return 1;
-    }
-
-    // Listen on the server socket with a max of 50 outstanding connections.
-    ret = listen(server_socket, 50);
-
-    if (ret != 0) {
-        perror("listen");
-        close(server_socket);
-        return 1;
-    }
+        return false;
+    } 
     max_fd = 0;
-     // Structure to fill in with connect message info
-    struct ConnectMessage connect_message;
-    // Zero out structure
-    memset(&connect_message, 0, sizeof(struct ConnectMessage));
-    connect_message.control_header.header.type = htons(CONTROL_MSG);
-    connect_message.control_header.header.length = htons(sizeof(struct ConnectMessage));
-    connect_message.control_header.control_type = htons(CONNECT);
-    ret = inet_pton(server_socket, server_hostname, temp_server_hostname); // ret 1 on success
-    connect_message.peer_data.peer_listen_port = client_port;
-
-    if (seed_hostname != NULL) { // initially our server is it's own peer?
-        memcpy(&connect_message.peer_data.ipv4_address, &temp_server_hostname, sizeof(struct in_addr));
-    }
-    // if (server.has_ipv6_address()) {
-    //   memcpy(&connect_message.peer_data.ipv6_address, &server.get_ipv6_address()->sin6_addr, sizeof(struct in6_addr));
-    // } 
-    //connect_message.peer_data.peer_listen_port = htons(atoi(server_port));
-    unsigned char *temp_ptr = (unsigned char *)&connect_message;
-
-    uint16_t send_size;
-    send_size = sizeof(ConnectMessage);
-
-  // Create hash after filling in rest of message.
-  //update_message_digest(&connect_message.control_header.header);
-    SHA256(&temp_ptr[sizeof(P2PHeader)], send_size - sizeof(P2PHeader), connect_message.control_header.header.msg_hash);
-
-    client = new TCPClient(server_socket, (struct sockaddr_storage*)&results->ai_addr, sizeof(results->ai_addr));
-    client_list.push_back(client);
-  if (client->add_send_data((char *) &connect_message, sizeof(connect_message)) != true) {
-    std::cerr << "Failed to add send data to client!" << std::endl;
-  }
 
     while (stop == false) {
         FD_ZERO(&read_set);
@@ -175,7 +75,6 @@ int main(int argc, char *argv[]) {
         // Mark the server_socket in the read set
         // If this is then set, it means we need to accept a new connection.
         FD_SET(server_socket, &read_set);
-              std::cout << "success1\n";
 
         if (server_socket > max_fd)
             max_fd = server_socket + 1;
@@ -183,7 +82,6 @@ int main(int argc, char *argv[]) {
         // For each client, set the appropriate descriptors in the select sets
         for (int i = 0; i < client_list.size(); i++) {
             // Lazy-legacy check. If we don't remove a client immediately set the vector entry to NULL
-
             if (client_list[i] == NULL) {
                 continue;
             }
@@ -200,7 +98,6 @@ int main(int argc, char *argv[]) {
             if (client_list[i]->get_fd() > max_fd)
                 max_fd = client_list[i]->get_fd() + 1;
         }
-              std::cout << "success3\n";
 
         // If select hasn't returned after 5 seconds, return anyways so other asynchronous events can be triggered
         // HINT: send a find_peer request?
@@ -241,11 +138,13 @@ int main(int argc, char *argv[]) {
                     // On error, something bad bad has happened to this client. Remove.
                     close(client_list[i]->get_fd());
                     client_list.erase(client_list.begin() + i);
+                    return false;
                     break;
                 } else if (ret == 0) {
                     // On 0 return, client has initiated connection shutdown.
                     close(client_list[i]->get_fd());
                     client_list.erase(client_list.begin() + i);
+                    return false;
                     break;
                 } else {
                     // Add the newly received data to the client buffer
@@ -261,13 +160,12 @@ int main(int argc, char *argv[]) {
                 client_list[i]->get_send_data(send_buf, DEFAULT_BUFFER_SIZE);
                 // Finally, send the data to the client.
                 ret = send(client_list[i]->get_fd(), send_buf, bytes_to_send, 0);
-                                                               std::cout << "Bytes sent: " << ret << "\n";
-
                 if (ret == -1) {
                     perror("send");
                     // On error, something bad bad has happened to this client. Remove.
                     close(client_list[i]->get_fd());
                     client_list.erase(client_list.begin() + i);
+                    return false;
                     break;
                 }
             }
@@ -287,7 +185,6 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-    /*
-    */
-    
+    return true;
 }
+
