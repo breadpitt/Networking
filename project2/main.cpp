@@ -82,16 +82,26 @@ int main(int argc, char *argv[]) {
     seed_hostname = argv[3];
     seed_port = argv[4];
 
-    // Create the TCP socket.
+    // Create TCP sockets.
     // AF_INET is the address family used for IPv4 addresses
     // SOCK_STREAM indicates creation of a TCP socket
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    int temp_client_socket = socket(AF_INET, SOCK_STREAM, 0);
     // Make sure socket was created successfully, or exit.
+    if (temp_client_socket == -1) {
+        std::cerr << "Failed to create tcp socket!" << std::endl;
+        std::cerr << strerror(errno) << std::endl;
+        return 1;
+    }
+    
     if (server_socket == -1) {
         std::cerr << "Failed to create tcp socket!" << std::endl;
         std::cerr << strerror(errno) << std::endl;
         return 1;
     }
+
+
+
 
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_addr = NULL;
@@ -119,7 +129,7 @@ int main(int argc, char *argv[]) {
         results_it = results_it->ai_next;
     }
     // Always free the result of calling getaddrinfo
-    //freeaddrinfo(results);
+    freeaddrinfo(results);
 
     if (ret != 0) {
         std::cerr << "Failed to bind to any addresses. Be sure to specify a local address/hostname, and an unused port?"
@@ -136,6 +146,55 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     max_fd = 0;
+
+
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_addr = NULL;
+    hints.ai_canonname = NULL;
+    hints.ai_family = AF_INET;
+    hints.ai_protocol = 0;
+    hints.ai_flags = AI_PASSIVE;
+    hints.ai_socktype = SOCK_STREAM;
+    ret = getaddrinfo(seed_hostname, seed_port, &hints, &results);
+    if (ret != 0) {
+        std::cerr << "Getaddrinfo failed with error " << ret << std::endl;
+        perror("getaddrinfo");
+        return 1;
+    }
+    results_it = results;
+    ret = -1;
+
+    while (results_it != NULL) {
+        ret = bind(temp_client_socket, results_it->ai_addr,
+                   results_it->ai_addrlen);
+        if (ret == 0) {
+            break;
+        }
+        perror("bind");
+        results_it = results_it->ai_next;
+    }
+    // Always free the result of calling getaddrinfo
+    freeaddrinfo(results);
+
+    if (ret != 0) {
+        std::cerr << "Failed to bind to any seed address. Be sure to specify a local address/hostname, and an unused port?"
+                  << std::endl;
+        return 1;
+    }
+
+
+    // Connect to init peer
+    ret = connect(temp_client_socket, results_it->ai_addr, results_it->ai_addrlen);
+    
+    if (ret == -1) {
+        std::cerr << "Failed to connect to init peer!" << std::endl;
+        std::cerr << strerror(errno) << std::endl;
+        return 1;
+    }
+
+    client = new TCPClient(server_socket, (struct sockaddr_storage*)&results->ai_addr, sizeof(results->ai_addr));
+    client_list.push_back(client);
+    
      // Structure to fill in with connect message info
     struct ConnectMessage connect_message;
     // Zero out structure
@@ -162,8 +221,7 @@ int main(int argc, char *argv[]) {
   //update_message_digest(&connect_message.control_header.header);
     SHA256(&temp_ptr[sizeof(P2PHeader)], send_size - sizeof(P2PHeader), connect_message.control_header.header.msg_hash);
 
-    client = new TCPClient(server_socket, (struct sockaddr_storage*)&results->ai_addr, sizeof(results->ai_addr));
-    client_list.push_back(client);
+    
   if (client->add_send_data((char *) &connect_message, sizeof(connect_message)) != true) {
     std::cerr << "Failed to add send data to client!" << std::endl;
   }
