@@ -36,6 +36,9 @@
 - When a peer disconnects, your client should remove it from its list of connected and known peers
 */
 
+int checkConnectMessage(char* buf); // parses the connect message header recieved
+
+
 int main(int argc, char *argv[]) {
     
     int client_port = 5555;
@@ -157,42 +160,27 @@ int main(int argc, char *argv[]) {
     hints.ai_socktype = SOCK_STREAM;
     ret = getaddrinfo(seed_hostname, seed_port, &hints, &results);
     if (ret != 0) {
-        std::cerr << "Getaddrinfo failed with error " << ret << std::endl;
+        std::cerr << "Getaddrinfo failed with error " << gai_strerror(ret) << std::endl;
         perror("getaddrinfo");
         return 1;
     }
     results_it = results;
     ret = -1;
-
-    while (results_it != NULL) {
-        ret = bind(temp_client_socket, results_it->ai_addr,
-                   results_it->ai_addrlen);
-        if (ret == 0) {
-            break;
-        }
-        perror("bind");
-        results_it = results_it->ai_next;
-    }
-    // Always free the result of calling getaddrinfo
     freeaddrinfo(results);
-
-    if (ret != 0) {
-        std::cerr << "Failed to bind to any seed address. Be sure to specify a local address/hostname, and an unused port?"
-                  << std::endl;
-        return 1;
-    }
 
 
     // Connect to init peer
     ret = connect(temp_client_socket, results_it->ai_addr, results_it->ai_addrlen);
-    
-    if (ret == -1) {
+    // Always free the result of calling getaddrinfo
+    if (ret == 0) {
+                std::cerr << "Successful connect to init peer!" << std::endl;
+    } else{
         std::cerr << "Failed to connect to init peer!" << std::endl;
         std::cerr << strerror(errno) << std::endl;
         return 1;
     }
 
-    client = new TCPClient(server_socket, (struct sockaddr_storage*)&results->ai_addr, sizeof(results->ai_addr));
+    client = new TCPClient(temp_client_socket, (struct sockaddr_storage*)&results->ai_addr, sizeof(results->ai_addr));
     client_list.push_back(client);
     
      // Structure to fill in with connect message info
@@ -208,10 +196,7 @@ int main(int argc, char *argv[]) {
     if (seed_hostname != NULL) { // initially our server is it's own peer?
         memcpy(&connect_message.peer_data.ipv4_address, &temp_server_hostname, sizeof(struct in_addr));
     }
-    // if (server.has_ipv6_address()) {
-    //   memcpy(&connect_message.peer_data.ipv6_address, &server.get_ipv6_address()->sin6_addr, sizeof(struct in6_addr));
-    // } 
-    //connect_message.peer_data.peer_listen_port = htons(atoi(server_port));
+    
     unsigned char *temp_ptr = (unsigned char *)&connect_message;
 
     uint16_t send_size;
@@ -221,7 +206,16 @@ int main(int argc, char *argv[]) {
   //update_message_digest(&connect_message.control_header.header);
     SHA256(&temp_ptr[sizeof(P2PHeader)], send_size - sizeof(P2PHeader), connect_message.control_header.header.msg_hash);
 
+    std::cout << "Size of struct Connect Message: " << sizeof(connect_message) << std::endl;
+    ControlMessage testcontrol;
+        std::cout << "Size of struct Control Message: " << sizeof(testcontrol) << std::endl;
     
+    P2PHeader testheader;
+            std::cout << "Size of struct P2P header: " << sizeof(testheader) << std::endl;
+
+
+
+
   if (client->add_send_data((char *) &connect_message, sizeof(connect_message)) != true) {
     std::cerr << "Failed to add send data to client!" << std::endl;
   }
@@ -338,6 +332,7 @@ int main(int argc, char *argv[]) {
 
                 // Read the data into a temporary buffer
                 client_list[i]->get_recv_data(scratch_buf, DEFAULT_BUFFER_SIZE);
+                checkConnectMessage(scratch_buf);
                 // Add the data we received from this client into the send_buffer
                 // Next time through the while loop, this will be detected and the data
                 // will get sent out.
@@ -349,3 +344,46 @@ int main(int argc, char *argv[]) {
     */
     
 }
+
+int checkConnectMessage(char* buf){
+    ControlMessage control_header;
+    P2PHeader p2pheader; // 36 bytes
+    PeerInfo peerdata;
+    uint16_t control_type;
+    uint16_t p2ptype; // p2p message type
+    uint16_t p2plength; // length of message including this header
+    uint16_t listenport;
+    uint32_t ipv4addr;
+    
+    memcpy(&control_header, &buf[0], sizeof(control_header)); // copy control header from the connect message buffer
+    memcpy(&p2pheader, &control_header.header, sizeof(p2pheader));
+    memcpy(&control_type, &control_header.control_type, sizeof(control_type));
+
+
+    memcpy(&peerdata, &buf[sizeof(control_header)], sizeof(peerdata));
+    memcpy(&listenport, &peerdata.peer_listen_port, sizeof(peerdata.peer_listen_port));
+    memcpy(&ipv4addr, &peerdata.ipv4_address, sizeof(peerdata.ipv4_address));
+
+
+    std::cout << "Connect message: " << ntohs(control_type) << "!\n";
+
+     std::cout << "peer listen port: " << ntohs(listenport) << "!\n";
+    std::cout << "peer ipv4address: " << ntohl(ipv4addr) << "!\n";
+
+    memcpy(&p2ptype, &p2pheader, sizeof(p2ptype));
+    memcpy(&p2plength, &p2pheader, sizeof(p2plength));
+
+
+    std::cout << "p2p message type: " << ntohs(p2ptype) << "!\n";
+    std::cout << "p2p message length: " << ntohs(p2plength) << "!\n";
+
+    /*if (ntohs(control_type) != CONNECT_OK){
+        std::cout << "Connect message recieve error\n";
+    } else {
+        std::cout << "Connect message OK!\n";
+    }*/
+
+
+    return 0;
+
+    }
